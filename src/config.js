@@ -1,0 +1,1 @@
+export const API_URL = "https://script.google.com/macros/s/AKfycbw5rHl_HnYZ0z3Dyke89TuCJvbwwV-i5G3g1-oygFlS_h-JZm3cGIa98qSFOH9XQinDhQ/exec";
