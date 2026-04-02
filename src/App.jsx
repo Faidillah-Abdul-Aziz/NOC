@@ -1,7 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import TicketEntry from './pages/TicketEntry'; 
-import Dashboard from './pages/Dashboard'; // <-- INI YANG MEMANGGIL GRAFIK ANDA
+import Dashboard from './pages/Dashboard'; 
+import UpdateTicket from './pages/UpdateTicket'; // <-- IMPORT HALAMAN BARU
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <div className="nav-menu">
             <Link to="/" className="nav-item">📝 Entry Ticket</Link>
             <Link to="/analytics" className="nav-item">📊 Dashboard Analytics</Link>
+            <Link to="/update" className="nav-item">⚙️ Update Ticket</Link> {/* <-- MENU BARU */}
           </div>
         </div>
 
@@ -21,8 +23,8 @@ function App() {
         <div className="main-content">
           <Routes>
             <Route path="/" element={<TicketEntry />} />
-            {/* INI MENAMPILKAN DASHBOARD YANG ASLI */}
             <Route path="/analytics" element={<Dashboard />} /> 
+            <Route path="/update" element={<UpdateTicket />} /> {/* <-- ROUTE BARU */}
           </Routes>
         </div>
 

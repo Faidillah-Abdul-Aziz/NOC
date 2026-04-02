@@ -1,18 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { API_URL } from '../config';
 
 const TicketEntry = () => {
   const [loading, setLoading] = useState(false);
   
+  // State untuk menyimpan opsi saran dari Database (Sudah diurutkan berdasarkan frekuensi)
+  const [deskripsiOptions, setDeskripsiOptions] = useState([]);
+  const [progressOptions, setProgressOptions] = useState([]);
+  const [restorationOptions, setRestorationOptions] = useState([]);
+  
+  // STATE DEFAULT 
   const [formData, setFormData] = useState({
     "Impact service": "",
-    "Media Info": "",
+    "Media Info": "Messenger", 
     "Deskripsi": "",
     "ID dan Nama Customer": "",
-    "ISP_Select": "", 
+    "ISP_Select": "IdeaNet", 
     "ISP_Lainnya": "", 
     "Cluster": "",
-    "Type Cluster": "", // Tambahan kolom baru
+    "Type Cluster": "Non VIP", 
     "Progress Update": "",
     "Start Time": "",
     "Response Time": "",
@@ -20,20 +26,61 @@ const TicketEntry = () => {
     "Start Stop Clock": "",
     "Finish Stop Clock": "",
     "Restoration Action": "",
-    "Root Cause": "",
+    "Root_Cause_Cat": "",
+    "Root_Cause_Sub": "",
+    "Root_Cause_Manual": "", 
     "Visit or No Visit": "",
-    "Product": "",
-    "PIC_Select": "", 
+    "Product": "Internet", 
+    "PIC_Select": "Ideanet", 
     "PIC_Lainnya": "", 
-    "Source": "",
+    "Source": "Manual", 
     "Status TT": "Open", 
-    "Network IDI": "",
+    "Network IDI": "Yes", 
     "NOC": "",
     "Site": "",
     "Category": "",
-    "Risk Severity": "",
-    "Priority": ""
   });
+
+  // --- FUNGSI MENGHITUNG FREKUENSI & MENGURUTKAN DATA ---
+  const getSortedByFrequency = (dataArray, key1, key2) => {
+    const counts = {};
+    dataArray.forEach(item => {
+      const val = item[key1] || (key2 ? item[key2] : null);
+      if (val && typeof val === 'string' && val.trim() !== '') {
+        const trimmedVal = val.trim();
+        counts[trimmedVal] = (counts[trimmedVal] || 0) + 1;
+      }
+    });
+    // Urutkan berdasarkan value (jumlah terbanyak) ke terkecil
+    return Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  };
+
+  // --- TARIK DATA DARI DATABASE SAAT HALAMAN DIBUKA ---
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      try {
+        const response = await fetch(API_URL);
+        const result = await response.json();
+        
+        if (result.status === "success" && result.data) {
+          const data = result.data;
+          
+          // Menggunakan fungsi frekuensi untuk mendapatkan array yang terurut
+          const sortedDeskripsi = getSortedByFrequency(data, "Deskripsi", "Deskripsi Awal");
+          const sortedProgress = getSortedByFrequency(data, "Progress Update");
+          const sortedRestoration = getSortedByFrequency(data, "Restoration Action");
+          
+          setDeskripsiOptions(sortedDeskripsi);
+          setProgressOptions(sortedProgress);
+          setRestorationOptions(sortedRestoration);
+        }
+      } catch (error) {
+        console.error("Gagal menarik data untuk auto-suggest:", error);
+      }
+    };
+
+    fetchSuggestions();
+  }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -45,15 +92,33 @@ const TicketEntry = () => {
 
     const payload = { ...formData };
     
-    // Logika penggabungan ISP
+    // Logika ISP
     payload["ISP"] = payload["ISP_Select"] === "Lainnya" ? payload["ISP_Lainnya"] : payload["ISP_Select"];
     delete payload["ISP_Select"];
     delete payload["ISP_Lainnya"];
 
-    // Logika penggabungan PIC
+    // Logika PIC
     payload["PIC"] = payload["PIC_Select"] === "Lainnya" ? payload["PIC_Lainnya"] : payload["PIC_Select"];
     delete payload["PIC_Select"];
     delete payload["PIC_Lainnya"];
+
+    // Logika Root Cause
+    let finalRootCause = "";
+    if (payload["Root_Cause_Cat"] === "Lainnya") {
+      finalRootCause = payload["Root_Cause_Manual"];
+    } else if (payload["Root_Cause_Sub"] === "Lainnya") {
+      finalRootCause = payload["Root_Cause_Cat"] + " " + payload["Root_Cause_Manual"];
+    } else if (payload["Root_Cause_Cat"] && payload["Root_Cause_Sub"]) {
+      finalRootCause = payload["Root_Cause_Cat"] + " " + payload["Root_Cause_Sub"];
+    } else {
+      finalRootCause = payload["Root_Cause_Cat"] || "";
+    }
+    
+    payload["Root Cause"] = finalRootCause.trim();
+    
+    delete payload["Root_Cause_Cat"];
+    delete payload["Root_Cause_Sub"];
+    delete payload["Root_Cause_Manual"];
 
     try {
       await fetch(API_URL, {
@@ -65,13 +130,14 @@ const TicketEntry = () => {
 
       alert("Tiket berhasil disimpan ke Database NOC!");
       
+      // Reset state ke default
       setFormData({
-        "Impact service": "", "Media Info": "", "Deskripsi": "", "ID dan Nama Customer": "",
-        "ISP_Select": "", "ISP_Lainnya": "", "Cluster": "", "Type Cluster": "", "Progress Update": "",
+        "Impact service": "", "Media Info": "Messenger", "Deskripsi": "", "ID dan Nama Customer": "",
+        "ISP_Select": "IdeaNet", "ISP_Lainnya": "", "Cluster": "", "Type Cluster": "Non VIP", "Progress Update": "",
         "Start Time": "", "Response Time": "", "Resolved Time": "", "Start Stop Clock": "",
-        "Finish Stop Clock": "", "Restoration Action": "", "Root Cause": "", "Visit or No Visit": "",
-        "Product": "", "PIC_Select": "", "PIC_Lainnya": "", "Source": "", "Status TT": "Open",
-        "Network IDI": "", "NOC": "", "Site": "", "Category": "", "Risk Severity": "", "Priority": ""
+        "Finish Stop Clock": "", "Restoration Action": "", "Root_Cause_Cat": "", "Root_Cause_Sub": "", "Root_Cause_Manual": "", 
+        "Visit or No Visit": "", "Product": "Internet", "PIC_Select": "Ideanet", "PIC_Lainnya": "", "Source": "Manual", "Status TT": "Open",
+        "Network IDI": "Yes", "NOC": "", "Site": "", "Category": ""
       });
       
     } catch (error) {
@@ -116,7 +182,6 @@ const TicketEntry = () => {
               </div>
             </div>
 
-            {/* --- BAGIAN CLUSTER YANG DIBAGI DUA (HALF & HALF) --- */}
             <div style={{ display: 'flex', gap: '15px' }}>
               <div className="form-group" style={{ flex: 1 }}>
                 <label>Cluster</label>
@@ -203,33 +268,23 @@ const TicketEntry = () => {
               </select>
             </div>
 
-            <div className="form-group">
-              <label>Risk Severity</label>
-              <select className="form-control" name="Risk Severity" value={formData["Risk Severity"]} onChange={handleChange} required>
-                <option value="">-- Pilih Severity --</option>
-                <option value="Very Low">Very Low</option>
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Priority</label>
-              <select className="form-control" name="Priority" value={formData["Priority"]} onChange={handleChange} required>
-                <option value="">-- Pilih Prioritas --</option>
-                <option value="Very Low">Very Low</option>
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Very High">Very High</option>
-              </select>
-            </div>
-
+            {/* --- DESKRIPSI (DYNAMIC SUGGESTION) --- */}
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label>Deskripsi (Kronologi)</label>
-              <textarea className="form-control" name="Deskripsi" rows="2" value={formData["Deskripsi"]} onChange={handleChange} placeholder="Tulis deskripsi awal..." required></textarea>
+              <input 
+                type="text" 
+                className="form-control" 
+                name="Deskripsi" 
+                list="deskripsi-list"
+                value={formData["Deskripsi"]} 
+                onChange={handleChange} 
+                placeholder="Ketik atau pilih deskripsi dari database..." 
+                autoComplete="off"
+                required 
+              />
+              <datalist id="deskripsi-list">
+                {deskripsiOptions.map((saran, idx) => <option key={idx} value={saran} />)}
+              </datalist>
             </div>
 
           </div>
@@ -308,17 +363,45 @@ const TicketEntry = () => {
               </div>
             </div>
 
-            <div className="form-group">
-              <label>Root Cause</label>
-              <select className="form-control" name="Root Cause" value={formData["Root Cause"]} onChange={handleChange}>
-                <option value="">-- Pilih Root Cause --</option>
-                <option value="Configuration">Configuration</option>
-                <option value="FO Access">FO Access</option>
-                <option value="FO Backbone">FO Backbone</option>
-                <option value="Equipment">Equipment</option>
-                <option value="No Issue">No Issue</option>
-              </select>
+            <div style={{ display: 'flex', gap: '15px', gridColumn: 'span 2' }}>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Kategori Root Cause</label>
+                <select className="form-control" name="Root_Cause_Cat" value={formData["Root_Cause_Cat"]} onChange={handleChange}>
+                  <option value="">-- Pilih Kategori --</option>
+                  <option value="Configuration">Configuration</option>
+                  <option value="FO">FO</option>
+                  <option value="Equipment">Equipment</option>
+                  <option value="Lainnya">Lainnya (Tulis Manual)</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Detail Root Cause</label>
+                {formData["Root_Cause_Cat"] === "Lainnya" ? (
+                  <input type="text" className="form-control" name="Root_Cause_Manual" value={formData["Root_Cause_Manual"]} onChange={handleChange} placeholder="Ketik kategori & detail manual..." />
+                ) : (
+                  <select className="form-control" name="Root_Cause_Sub" value={formData["Root_Cause_Sub"]} onChange={handleChange} disabled={!formData["Root_Cause_Cat"]}>
+                    <option value="">-- Pilih Detail --</option>
+                    {formData["Root_Cause_Cat"] === "Configuration" && (
+                      <><option value="Core">Core</option><option value="ONT">ONT</option><option value="Switch">Switch</option><option value="Lainnya">Lainnya...</option></>
+                    )}
+                    {formData["Root_Cause_Cat"] === "FO" && (
+                      <><option value="Access">Access</option><option value="Backbone">Backbone</option><option value="OLT-FDT">OLT-FDT</option><option value="Lainnya">Lainnya...</option></>
+                    )}
+                    {formData["Root_Cause_Cat"] === "Equipment" && (
+                      <><option value="ONT">ONT</option><option value="Switch">Switch</option><option value="Router">Router</option><option value="Lainnya">Lainnya...</option></>
+                    )}
+                  </select>
+                )}
+              </div>
             </div>
+
+            {formData["Root_Cause_Sub"] === "Lainnya" && formData["Root_Cause_Cat"] !== "Lainnya" && (
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label>Tulis Detail Manual untuk {formData["Root_Cause_Cat"]}</label>
+                <input type="text" className="form-control" name="Root_Cause_Manual" value={formData["Root_Cause_Manual"]} onChange={handleChange} placeholder="Ketik detail spesifik..." />
+              </div>
+            )}
 
             <div className="form-group">
               <label>Visit or No Visit</label>
@@ -337,21 +420,47 @@ const TicketEntry = () => {
               </select>
             </div>
 
+            {/* --- PROGRESS UPDATE (DYNAMIC SUGGESTION) --- */}
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label>Progress Update</label>
-              <textarea className="form-control" name="Progress Update" rows="2" value={formData["Progress Update"]} onChange={handleChange} placeholder="Tulis update terbaru..."></textarea>
+              <input 
+                type="text" 
+                className="form-control" 
+                name="Progress Update" 
+                list="progress-list"
+                value={formData["Progress Update"]} 
+                onChange={handleChange} 
+                placeholder="Ketik atau pilih dari database..." 
+                autoComplete="off"
+              />
+              <datalist id="progress-list">
+                {progressOptions.map((saran, idx) => <option key={idx} value={saran} />)}
+              </datalist>
             </div>
 
+            {/* --- RESTORATION ACTION (DYNAMIC SUGGESTION) --- */}
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label>Restoration Action</label>
-              <textarea className="form-control" name="Restoration Action" rows="2" value={formData["Restoration Action"]} onChange={handleChange} placeholder="Tindakan yang sudah dilakukan..."></textarea>
+              <input 
+                type="text" 
+                className="form-control" 
+                name="Restoration Action" 
+                list="restoration-list"
+                value={formData["Restoration Action"]} 
+                onChange={handleChange} 
+                placeholder="Ketik atau pilih dari database..." 
+                autoComplete="off"
+              />
+              <datalist id="restoration-list">
+                {restorationOptions.map((saran, idx) => <option key={idx} value={saran} />)}
+              </datalist>
             </div>
 
           </div>
         </div>
 
         <button type="submit" className="btn-submit" disabled={loading} style={{ padding: '15px', fontSize: '1.1rem' }}>
-          {loading ? "Menyimpan ke Excel..." : "SUBMIT TICKET"}
+          {loading ? "Menyimpan ke Database..." : "SUBMIT TICKET"}
         </button>
 
       </form>
