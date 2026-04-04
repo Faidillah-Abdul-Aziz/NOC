@@ -66,30 +66,10 @@ const UpdateTicket = () => {
     if (!selectedTicket) return;
     try {
       setIsSubmitting(true);
-      
-      const payload = { 
-        action: 'update', 
-        ttNo: selectedTicket["TT No"], 
-        ...formData 
-      };
-
-      // PERBAIKAN: Menambahkan mode: 'no-cors' agar tidak diblokir browser saat update
-      await fetch(API_URL, { 
-        method: 'POST', 
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' }, 
-        body: JSON.stringify(payload) 
-      });
-      
+      await fetch(API_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'update', ttNo: selectedTicket["TT No"], ...formData }) });
       alert(`Tiket ${selectedTicket["TT No"]} berhasil diupdate!`);
-      setSelectedTicket(null); 
-      fetchTickets(); 
-    } catch (error) { 
-      alert("Gagal mengupdate. Cek koneksi Anda."); 
-      console.error(error);
-    } finally { 
-      setIsSubmitting(false); 
-    }
+      setSelectedTicket(null); fetchTickets(); 
+    } catch (error) { alert("Gagal mengupdate."); console.error(error); } finally { setIsSubmitting(false); }
   };
 
   const renderDetailWaktu = (row) => {
@@ -124,7 +104,7 @@ const UpdateTicket = () => {
         <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '320px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '1000px' }}>
             <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>
-              <tr>{['TT No', 'Customer', 'Category', 'Detail Waktu', 'Status', 'Deskripsi Awal', 'Progress Update', 'Action'].map(h => (<th key={h} style={{ padding: '12px 15px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>{h}</th>))}</tr>
+              <tr>{['TT No', 'Customer', 'Category', 'Detail Waktu', 'Status', 'Deskripsi Awal', 'Progress Update', 'NOC', 'Action'].map(h => (<th key={h} style={{ padding: '12px 15px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>{h}</th>))}</tr>
             </thead>
             <tbody>
               {filteredData.map((row, idx) => {
@@ -138,6 +118,10 @@ const UpdateTicket = () => {
                     <td style={{ padding: '12px 15px' }}><span style={{ padding: '4px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold', background: isOpen ? '#fef3c7' : '#d1fae5', color: isOpen ? '#d97706' : '#059669' }}>{row["Status TT"]}</span></td>
                     <td style={{ padding: '12px 15px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row["Deskripsi Awal"] || row["Deskripsi"]}</td>
                     <td style={{ padding: '12px 15px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row["Progress Update"]}</td>
+                    
+                    {/* KOLOM NOC BARU */}
+                    <td style={{ padding: '12px 15px', color: '#334155', fontWeight: '500', whiteSpace: 'nowrap' }}>{row["NOC"] || "-"}</td>
+
                     <td style={{ padding: '12px 15px', display: 'flex', gap: '5px' }}>
                       <button onClick={() => setViewTicket(row)} style={{ padding: '5px 10px', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Lihat</button>
                       <button onClick={() => handleSelectTicket(row)} style={{ padding: '5px 10px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Update</button>
@@ -180,7 +164,7 @@ const UpdateTicket = () => {
       {viewTicket && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px', boxSizing: 'border-box' }}>
           <div style={{ background: '#fff', width: '100%', maxWidth: '700px', maxHeight: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between' }}><h3 style={{ margin:0 }}>Detail Tiket</h3><button onClick={() => setViewTicket(null)} style={{ background:'none', border:'none', fontSize:'1.5rem', cursor:'pointer' }}>&times;</button></div>
+            <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #eee' }}><h3 style={{ margin:0 }}>Detail Tiket</h3><button onClick={() => setViewTicket(null)} style={{ background:'none', border:'none', fontSize:'1.5rem', cursor:'pointer' }}>&times;</button></div>
             <div style={{ padding: '20px', overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               {Object.entries(viewTicket).map(([k, v]) => (!k.trim() ? null : <div key={k} style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px' }}><strong style={{ display: 'block', fontSize: '0.75rem', color: '#64748b' }}>{k}</strong><div style={{ wordBreak: 'break-word', fontSize: '0.9rem' }}>{v || '-'}</div></div>))}
             </div>
