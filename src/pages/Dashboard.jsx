@@ -32,7 +32,6 @@ const Dashboard = () => {
       const response = await fetch(API_URL);
       const result = await response.json();
       if (result.status === "success" && result.data) {
-        // Pastikan data langsung dibalik di sini agar yang terbaru (paling bawah di Sheets) ada di atas
         setData(result.data.filter(item => item["TT No"] && item["TT No"].trim() !== "").reverse());
       }
     } catch (error) { console.error(error); } finally { setLoading(false); }
@@ -91,7 +90,6 @@ const Dashboard = () => {
   const rootCauseCounts = rcaFilteredData.reduce((acc, i) => { acc[i["Root Cause"] || "Unspecified"] = (acc[i["Root Cause"] || "Unspecified"] || 0) + 1; return acc; }, {});
   const barData = Object.keys(rootCauseCounts).map(k => ({ name: k, Total: rootCauseCounts[k] })).sort((a,b)=>b.Total-a.Total);
 
-  // Karena data utama sudah di-reverse di atas, kita cukup filter saja di sini (tanpa di-reverse lagi)
   let tableDataProcessed = [...filteredData].filter(i => {
     if (tableDetailFilter === 'Active' && !i["Status TT"]?.toLowerCase().includes("open")) return false;
     if (tableDetailFilter === 'Out SLA' && !i["SLA Real"]?.toLowerCase().includes("out")) return false;
@@ -100,7 +98,6 @@ const Dashboard = () => {
     if (tableSla === 'Out SLA' && !i["SLA Real"]?.toLowerCase().includes("out")) return false;
     if (tableCluster !== 'All' && i["Cluster"] !== tableCluster) return false;
     if (tableCategory !== 'All' && i["Category"] !== tableCategory) return false;
-    
     if (tableSite.length > 0 && !tableSite.some(opt => opt.value === i["Site"])) return false;
 
     if (searchCustomer.trim() !== '') {
@@ -114,112 +111,132 @@ const Dashboard = () => {
     return true;
   });
 
-  const metricCard = (border) => ({ backgroundColor: '#fff', borderRadius: '12px', padding: '20px', border: '1px solid #f3f4f6', borderLeft: `6px solid ${border}`, flex: '1 1 250px' });
-  const inputStyle = { padding: '8px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.85rem' };
-
   return (
-    <div style={{ padding: '20px', color: '#1f2937', fontFamily: 'sans-serif' }}>
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+    <div className="dash-wrapper">
+      {/* --- CSS INJEKSI MOBILE FRIENDLY --- */}
+      <style>{`
+        .dash-wrapper { padding: 20px; color: #1f2937; font-family: sans-serif; box-sizing: border-box; width: 100%; overflow-x: hidden; }
+        
+        .dash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
+        .dash-header-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+        
+        .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 25px; }
+        .metric-card { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #f3f4f6; display: flex; flex-direction: column; justify-content: center; }
+        
+        .middle-grid { display: grid; grid-template-columns: 1.2fr 1fr 1.5fr; gap: 20px; margin-bottom: 25px; align-items: stretch; }
+        .middle-card { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #f3f4f6; display: flex; flex-direction: column; }
+        .sla-split { display: flex; gap: 20px; flex: 1; margin-top: 20px; }
+        
+        .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; width: 100%; }
+        .filter-input { padding: 8px 12px; border-radius: 6px; border: 1px solid #d1d5db; font-size: 0.85rem; flex: 1 1 150px; min-width: 120px; background: #fff; }
+        .filter-select-container { flex: 1 1 200px; min-width: 150px; }
+
+        /* --- RESPONSIVE MEDIA QUERIES UNTUK HP & TABLET --- */
+        @media (max-width: 1024px) {
+          .middle-grid { grid-template-columns: 1fr; } /* Grafik di bawah jadi 1 kolom besar */
+        }
+        
+        @media (max-width: 768px) {
+          .dash-wrapper { padding: 10px; }
+          .dash-header { flex-direction: column; align-items: stretch; }
+          .dash-header-controls { justify-content: space-between; }
+          .dash-header-controls > select { flex: 1; }
+          
+          .metrics-grid { grid-template-columns: 1fr; gap: 15px; } /* Metrik berjejer ke bawah */
+          .sla-split { flex-direction: column; gap: 15px; } /* Kartu In SLA / Out SLA ke bawah */
+          
+          .filter-bar { flex-direction: column; align-items: stretch; }
+          .filter-input, .filter-select-container { width: 100%; flex: 1 1 100%; }
+        }
+      `}</style>
+
+      {/* HEADER */}
+      <div className="dash-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>Analytics Overview</h2>
           <button onClick={fetchData} style={{ padding: '6px 12px', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}>🔄 Refresh</button>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <select style={inputStyle} value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterValue(''); }}>
+        <div className="dash-header-controls">
+          <select className="filter-input" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterValue(''); }}>
             <option value="All">All Time</option><option value="Month">By Month</option><option value="Week">By Week</option>
           </select>
-          {filterType === 'Month' && <select style={inputStyle} value={filterValue} onChange={e=>setFilterValue(e.target.value)}><option value="">-- Pilih Bulan --</option>{uniqueMonths.map(m => <option key={m} value={m}>{m}</option>)}</select>}
-          {filterType === 'Week' && <select style={inputStyle} value={filterValue} onChange={e=>setFilterValue(e.target.value)}><option value="">-- Pilih Minggu --</option>{uniqueWeeks.map(w => <option key={w} value={w}>{w}</option>)}</select>}
+          {filterType === 'Month' && <select className="filter-input" value={filterValue} onChange={e=>setFilterValue(e.target.value)}><option value="">-- Pilih Bulan --</option>{uniqueMonths.map(m => <option key={m} value={m}>{m}</option>)}</select>}
+          {filterType === 'Week' && <select className="filter-input" value={filterValue} onChange={e=>setFilterValue(e.target.value)}><option value="">-- Pilih Minggu --</option>{uniqueWeeks.map(w => <option key={w} value={w}>{w}</option>)}</select>}
         </div>
       </div>
       
       {/* ROW 1: METRICS */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '25px' }}>
-        <div style={metricCard('#3b82f6')}><p style={{margin:0, fontSize:'0.85rem', color:'#6b7280', fontWeight:'bold'}}>TOTAL TICKETS</p><h3 style={{margin:'5px 0 0', fontSize:'2.2rem', color:'#111827'}}>{totalTT}</h3></div>
-        <div style={metricCard('#f59e0b')}><p style={{margin:0, fontSize:'0.85rem', color:'#6b7280', fontWeight:'bold'}}>ACTIVE TICKETS (OPEN)</p><h3 style={{margin:'5px 0 0', fontSize:'2.2rem', color:'#111827'}}>{activeTT}</h3></div>
-        <div style={metricCard('#ef4444')}><p style={{margin:0, fontSize:'0.85rem', color:'#6b7280', fontWeight:'bold'}}>OVERDUE MTTR (OUT SLA & OPEN)</p><h3 style={{margin:'5px 0 0', fontSize:'2.2rem', color:'#ef4444'}}>{overdueMTTR}</h3></div>
+      <div className="metrics-grid">
+        <div className="metric-card" style={{ borderLeft: '6px solid #3b82f6' }}><p style={{margin:0, fontSize:'0.85rem', color:'#6b7280', fontWeight:'bold'}}>TOTAL TICKETS</p><h3 style={{margin:'5px 0 0', fontSize:'2.2rem', color:'#111827'}}>{totalTT}</h3></div>
+        <div className="metric-card" style={{ borderLeft: '6px solid #f59e0b' }}><p style={{margin:0, fontSize:'0.85rem', color:'#6b7280', fontWeight:'bold'}}>ACTIVE TICKETS (OPEN)</p><h3 style={{margin:'5px 0 0', fontSize:'2.2rem', color:'#111827'}}>{activeTT}</h3></div>
+        <div className="metric-card" style={{ borderLeft: '6px solid #ef4444' }}><p style={{margin:0, fontSize:'0.85rem', color:'#6b7280', fontWeight:'bold'}}>OVERDUE MTTR (OUT SLA & OPEN)</p><h3 style={{margin:'5px 0 0', fontSize:'2.2rem', color:'#ef4444'}}>{overdueMTTR}</h3></div>
       </div>
 
       {/* ROW 2: PIE & SLA PERFORMANCE */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '25px', alignItems: 'stretch' }}>
+      <div className="middle-grid">
         
         {/* Left: Pie */}
-        <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column' }}>
+        <div className="middle-card">
           <h4 style={{ margin: '0 0 10px', color: '#374151' }}>TT by Status</h4>
-          <div style={{ flex: 1, minHeight: 200 }}>
+          <div style={{ flex: 1, minHeight: 250 }}>
             <ResponsiveContainer>
               <PieChart>
-                <Pie 
-                  data={pieData} 
-                  cx="50%" 
-                  cy="50%" 
-                  innerRadius={60} 
-                  outerRadius={80} 
-                  paddingAngle={5} 
-                  dataKey="value" 
-                  stroke="none"
-                  label={renderCustomLabel}
-                  labelLine={false}
-                >
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none" label={renderCustomLabel} labelLine={false}>
                   {pieData.map((e, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                 </Pie>
-                <Tooltip />
-                <Legend />
+                <Tooltip /><Legend />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Middle: SLA Cards */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%' }}>
-          <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '15px', borderRadius: '12px', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        {/* Middle: SLA Cards (SIMETRIS) */}
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '20px', borderRadius: '12px', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <p style={{margin:0, fontSize:'0.85rem', color:'#166534', fontWeight:'bold'}}>COMPLETED TT</p>
-            <h2 style={{margin:'5px 0 0', fontSize:'2rem', color:'#166534'}}>{completedTT}</h2>
+            <h2 style={{margin:'5px 0 0', fontSize:'2.5rem', color:'#166534'}}>{completedTT}</h2>
           </div>
-          <div style={{ display: 'flex', gap: '20px', flex: 1 }}>
+          <div className="sla-split">
             <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', padding: '15px', borderRadius: '12px', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <p style={{margin:0, fontSize:'0.8rem', color:'#059669', fontWeight:'bold'}}>IN SLA</p>
-              <h3 style={{margin:'5px 0 0', fontSize:'1.5rem', color:'#059669'}}>{inSLA}</h3>
+              <h3 style={{margin:'5px 0 0', fontSize:'1.8rem', color:'#059669'}}>{inSLA}</h3>
             </div>
             <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', padding: '15px', borderRadius: '12px', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <p style={{margin:0, fontSize:'0.8rem', color:'#dc2626', fontWeight:'bold'}}>OUT SLA</p>
-              <h3 style={{margin:'5px 0 0', fontSize:'1.5rem', color:'#dc2626'}}>{outSLA}</h3>
+              <h3 style={{margin:'5px 0 0', fontSize:'1.8rem', color:'#dc2626'}}>{outSLA}</h3>
             </div>
           </div>
         </div>
 
         {/* Right: Bar */}
-        <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div className="middle-card" style={{ justifyContent: 'center' }}>
           <h4 style={{ margin: '0 0 20px', color: '#374151' }}>SLA Performance by Category</h4>
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px' }}><span>Retail <span style={{color:'#10b981'}}>{retailPerc}% In SLA</span></span><span style={{color:'#6b7280'}}>Total: {retailData.length}</span></div>
-            <div style={{ display: 'flex', height: '24px', borderRadius: '6px', overflow: 'hidden', background: '#e5e7eb' }}>
-              <div style={{ width: `${(retailInSLA/retailData.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{retailInSLA||''}</div>
-              <div style={{ width: `${(retailOutSLA/retailData.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{retailOutSLA||''}</div>
+          <div style={{ marginBottom: '25px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '8px' }}><span>Retail <span style={{color:'#10b981'}}>{retailPerc}% In SLA</span></span><span style={{color:'#6b7280'}}>Total: {retailData.length}</span></div>
+            <div style={{ display: 'flex', height: '28px', borderRadius: '6px', overflow: 'hidden', background: '#e5e7eb' }}>
+              <div style={{ width: `${(retailInSLA/retailData.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{retailInSLA||''}</div>
+              <div style={{ width: `${(retailOutSLA/retailData.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{retailOutSLA||''}</div>
             </div>
           </div>
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '5px' }}><span>Enterprise <span style={{color:'#10b981'}}>{entPerc}% In SLA</span></span><span style={{color:'#6b7280'}}>Total: {enterpriseData.length}</span></div>
-            <div style={{ display: 'flex', height: '24px', borderRadius: '6px', overflow: 'hidden', background: '#e5e7eb' }}>
-              <div style={{ width: `${(enterpriseInSLA/enterpriseData.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{enterpriseInSLA||''}</div>
-              <div style={{ width: `${(enterpriseOutSLA/enterpriseData.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{enterpriseOutSLA||''}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '8px' }}><span>Enterprise <span style={{color:'#10b981'}}>{entPerc}% In SLA</span></span><span style={{color:'#6b7280'}}>Total: {enterpriseData.length}</span></div>
+            <div style={{ display: 'flex', height: '28px', borderRadius: '6px', overflow: 'hidden', background: '#e5e7eb' }}>
+              <div style={{ width: `${(enterpriseInSLA/enterpriseData.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{enterpriseInSLA||''}</div>
+              <div style={{ width: `${(enterpriseOutSLA/enterpriseData.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{enterpriseOutSLA||''}</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* ROW 3: RCA CHART */}
-      <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '20px', border: '1px solid #f3f4f6', marginBottom: '25px' }}>
+      <div className="middle-card" style={{ marginBottom: '25px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
           <h3 style={{ margin: 0, color: '#374151' }}>Root Cause Analysis</h3>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <select value={rcaSla} onChange={e=>setRcaSla(e.target.value)} style={inputStyle}><option value="All">All SLA</option><option value="In SLA">In SLA</option><option value="Out SLA">Out SLA</option></select>
-            <select value={rcaCategory} onChange={e=>setRcaCategory(e.target.value)} style={inputStyle}>
-              <option value="All">All Category</option><option value="Retail">Retail</option><option value="Enterprise">Enterprise</option>
-            </select>
-            <div style={{ minWidth: '200px' }}><Select isMulti options={siteOptions} value={rcaSite} onChange={setRcaSite} placeholder="Search Sites..." styles={{ control: (b) => ({...b, minHeight:'34px', borderRadius:'6px', borderColor:'#d1d5db'}) }} menuPortalTarget={document.body} /></div>
-            <select value={rcaCluster} onChange={e=>setRcaCluster(e.target.value)} style={inputStyle}><option value="All">All Clusters</option>{uniqueClusters.map(c=><option key={c} value={c}>{c}</option>)}</select>
+          <div className="filter-bar">
+            <select value={rcaSla} onChange={e=>setRcaSla(e.target.value)} className="filter-input"><option value="All">All SLA</option><option value="In SLA">In SLA</option><option value="Out SLA">Out SLA</option></select>
+            <select value={rcaCategory} onChange={e=>setRcaCategory(e.target.value)} className="filter-input"><option value="All">All Category</option><option value="Retail">Retail</option><option value="Enterprise">Enterprise</option></select>
+            <div className="filter-select-container"><Select isMulti options={siteOptions} value={rcaSite} onChange={setRcaSite} placeholder="Search Sites..." styles={{ control: (b) => ({...b, minHeight:'34px', borderRadius:'6px', borderColor:'#d1d5db'}) }} menuPortalTarget={document.body} /></div>
+            <select value={rcaCluster} onChange={e=>setRcaCluster(e.target.value)} className="filter-input"><option value="All">All Clusters</option>{uniqueClusters.map(c=><option key={c} value={c}>{c}</option>)}</select>
           </div>
         </div>
         <div style={{ width: '100%', height: 300 }}>
@@ -237,22 +254,21 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* ROW 4: DATA TABLE */}
-      <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #f3f4f6' }}>
+      {/* ROW 4: DATA TABLE (BATAS 5 BARIS / 320px) */}
+      <div className="middle-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
           <div><h3 style={{ margin: 0, display: 'inline-block', marginRight: '10px' }}>Ticket Details</h3><span style={{ fontSize: '0.8rem', background: '#f3f4f6', padding: '4px 8px', borderRadius: '12px' }}>Showing {tableDataProcessed.length} entries</span></div>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <input type="text" placeholder="Cari ID/Nama (koma)..." value={searchCustomer} onChange={e=>setSearchCustomer(e.target.value)} style={inputStyle} />
-            <select value={tableSla} onChange={e=>setTableSla(e.target.value)} style={inputStyle}><option value="All">All SLA</option><option value="In SLA">In SLA</option><option value="Out SLA">Out SLA</option></select>
-            <select value={tableCategory} onChange={e=>setTableCategory(e.target.value)} style={inputStyle}>
-              <option value="All">All Category</option><option value="Retail">Retail</option><option value="Enterprise">Enterprise</option>
-            </select>
-            <div style={{ minWidth: '150px' }}><Select isMulti options={siteOptions} value={tableSite} onChange={setTableSite} placeholder="Sites..." styles={{ control: (b) => ({...b, minHeight:'34px', borderRadius:'6px', borderColor:'#d1d5db'}) }} menuPortalTarget={document.body} /></div>
-            <select value={tableCluster} onChange={e=>setTableCluster(e.target.value)} style={inputStyle}><option value="All">All Clusters</option>{uniqueClusters.map(c=><option key={c} value={c}>{c}</option>)}</select>
-            <select value={tableDetailFilter} onChange={e=>setTableDetailFilter(e.target.value)} style={{...inputStyle, fontWeight:'bold'}}><option value="All">All Tickets</option><option value="Active">Active Tickets</option><option value="Out SLA">Out SLA</option></select>
+          <div className="filter-bar">
+            <input type="text" placeholder="Cari ID/Nama/TT (koma)..." value={searchCustomer} onChange={e=>setSearchCustomer(e.target.value)} className="filter-input" />
+            <select value={tableSla} onChange={e=>setTableSla(e.target.value)} className="filter-input"><option value="All">All SLA</option><option value="In SLA">In SLA</option><option value="Out SLA">Out SLA</option></select>
+            <select value={tableCategory} onChange={e=>setTableCategory(e.target.value)} className="filter-input"><option value="All">All Category</option><option value="Retail">Retail</option><option value="Enterprise">Enterprise</option></select>
+            <div className="filter-select-container"><Select isMulti options={siteOptions} value={tableSite} onChange={setTableSite} placeholder="Sites..." styles={{ control: (b) => ({...b, minHeight:'34px', borderRadius:'6px', borderColor:'#d1d5db'}) }} menuPortalTarget={document.body} /></div>
+            <select value={tableCluster} onChange={e=>setTableCluster(e.target.value)} className="filter-input"><option value="All">All Clusters</option>{uniqueClusters.map(c=><option key={c} value={c}>{c}</option>)}</select>
+            <select value={tableDetailFilter} onChange={e=>setTableDetailFilter(e.target.value)} className="filter-input" style={{fontWeight:'bold'}}><option value="All">All Tickets</option><option value="Active">Active Tickets</option><option value="Out SLA">Out SLA</option></select>
           </div>
         </div>
         
+        {/* Kontainer Tabel */}
         <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '320px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '1000px' }}>
             <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>
@@ -284,7 +300,7 @@ const Dashboard = () => {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px', boxSizing: 'border-box' }}>
           <div style={{ background: '#fff', width: '100%', maxWidth: '700px', maxHeight: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between' }}><h3 style={{ margin:0 }}>Detail Tiket</h3><button onClick={() => setViewTicket(null)} style={{ background:'none', border:'none', fontSize:'1.5rem', cursor:'pointer' }}>&times;</button></div>
-            <div style={{ padding: '20px', overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div style={{ padding: '20px', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
               {Object.entries(viewTicket).map(([k, v]) => (!k.trim() ? null : <div key={k} style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px' }}><strong style={{ display: 'block', fontSize: '0.75rem', color: '#64748b' }}>{k}</strong><div style={{ wordBreak: 'break-word', fontSize: '0.9rem' }}>{v || '-'}</div></div>))}
             </div>
           </div>
