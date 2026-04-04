@@ -20,10 +20,7 @@ const UpdateTicket = () => {
 
   const fetchTickets = async () => {
     try { setLoading(true); const response = await fetch(API_URL); const result = await response.json();
-      if (result.status === "success" && result.data) { 
-        // Reverse diaplikasikan di sini langsung setelah fetch
-        setData(result.data.filter(item => item["TT No"] && item["TT No"].trim() !== "").reverse()); 
-      }
+      if (result.status === "success" && result.data) { setData(result.data.filter(item => item["TT No"] && item["TT No"].trim() !== "").reverse()); }
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
 
@@ -31,7 +28,6 @@ const UpdateTicket = () => {
 
   const siteOptions = [...new Set(data.map(item => item["Site"]).filter(Boolean))].map(site => ({ value: site, label: site }));
 
-  // Tanpa reverse lagi di sini agar datanya tidak berbalik ke bentuk lama
   const filteredData = data.filter(item => {
     if (tableSla === 'In SLA' && !(item["SLA Real"] && item["SLA Real"].toLowerCase().includes("in"))) return false;
     if (tableSla === 'Out SLA' && !(item["SLA Real"] && item["SLA Real"].toLowerCase().includes("out"))) return false;
@@ -70,10 +66,30 @@ const UpdateTicket = () => {
     if (!selectedTicket) return;
     try {
       setIsSubmitting(true);
-      await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'update', ttNo: selectedTicket["TT No"], ...formData }) });
+      
+      const payload = { 
+        action: 'update', 
+        ttNo: selectedTicket["TT No"], 
+        ...formData 
+      };
+
+      // PERBAIKAN: Menambahkan mode: 'no-cors' agar tidak diblokir browser saat update
+      await fetch(API_URL, { 
+        method: 'POST', 
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' }, 
+        body: JSON.stringify(payload) 
+      });
+      
       alert(`Tiket ${selectedTicket["TT No"]} berhasil diupdate!`);
-      setSelectedTicket(null); fetchTickets(); 
-    } catch (error) { alert("Gagal mengupdate."); } finally { setIsSubmitting(false); }
+      setSelectedTicket(null); 
+      fetchTickets(); 
+    } catch (error) { 
+      alert("Gagal mengupdate. Cek koneksi Anda."); 
+      console.error(error);
+    } finally { 
+      setIsSubmitting(false); 
+    }
   };
 
   const renderDetailWaktu = (row) => {
@@ -105,7 +121,6 @@ const UpdateTicket = () => {
           </div>
         </div>
 
-        {/* Kontainer Tabel dengan batas tinggi max 320px (sekitar 5 baris) */}
         <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '320px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '1000px' }}>
             <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>
@@ -165,7 +180,7 @@ const UpdateTicket = () => {
       {viewTicket && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px', boxSizing: 'border-box' }}>
           <div style={{ background: '#fff', width: '100%', maxWidth: '700px', maxHeight: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #eee' }}><h3 style={{ margin:0 }}>Detail Tiket</h3><button onClick={() => setViewTicket(null)} style={{ background:'none', border:'none', fontSize:'1.5rem', cursor:'pointer' }}>&times;</button></div>
+            <div style={{ padding: '20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between' }}><h3 style={{ margin:0 }}>Detail Tiket</h3><button onClick={() => setViewTicket(null)} style={{ background:'none', border:'none', fontSize:'1.5rem', cursor:'pointer' }}>&times;</button></div>
             <div style={{ padding: '20px', overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               {Object.entries(viewTicket).map(([k, v]) => (!k.trim() ? null : <div key={k} style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px' }}><strong style={{ display: 'block', fontSize: '0.75rem', color: '#64748b' }}>{k}</strong><div style={{ wordBreak: 'break-word', fontSize: '0.9rem' }}>{v || '-'}</div></div>))}
             </div>

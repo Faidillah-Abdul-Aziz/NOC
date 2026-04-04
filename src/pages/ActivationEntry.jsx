@@ -18,18 +18,6 @@ const ActivationEntry = () => {
 
   const [formData, setFormData] = useState({ "No: FAB/FAT": "", "Tipe Service": "GPON", "Tipe Pekerjaan": "Aktivasi", "SN ONU / MAC Address": "", "ISP_Select": "Ideanet", "ISP_Lainnya": "", "Site": "", "ID Pelanggan": "", "Nama Pelanggan": "", "BW_Select": "20Mbps", "BW_Lainnya": "", "PIC": "" });
 
-  const getSortedByFrequency = (dataArray, key) => {
-    const counts = {};
-    dataArray.forEach(item => {
-      const val = item[key];
-      if (val && typeof val === 'string' && val.trim() !== '') {
-        const trimmedVal = val.trim();
-        counts[trimmedVal] = (counts[trimmedVal] || 0) + 1;
-      }
-    });
-    return Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-  };
-
   const fetchActivationData = async () => {
     try {
       setLoading(true);
@@ -85,8 +73,12 @@ const ActivationEntry = () => {
     if (filterKerja !== 'All' && item["Tipe Pekerjaan"] !== filterKerja) return false;
     if (filterSite.length > 0 && !filterSite.some(option => option.value === item["Site"])) return false;
     if (searchPelanggan.trim() !== '') {
-      const terms = searchPelanggan.toLowerCase().split(',').map(t=>t.trim());
-      if (!terms.some(t => (item["Nama Pelanggan"]||"").toLowerCase().includes(t) || (item["ID Pelanggan"]||"").toLowerCase().includes(t))) return false;
+      const terms = searchPelanggan.toLowerCase().split(',').map(t=>t.trim()).filter(Boolean);
+      if (terms.length > 0) {
+        const customerInfo = (item["Nama Pelanggan"]||"").toLowerCase();
+        const customerId = (item["ID Pelanggan"]||"").toLowerCase();
+        if (!terms.some(term => customerInfo.includes(term) || customerId.includes(term))) return false;
+      }
     }
     return true;
   });
@@ -102,7 +94,7 @@ const ActivationEntry = () => {
       <style>{`
         .act-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .act-full { grid-column: span 2; }
-        .act-input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 0.9rem; box-sizing: border-box; background: #fff; transition: 0.2s; }
+        .act-input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 0.9rem; box-sizing: border-box; background: #fff; transition: 0.2s; }
         .act-input:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
         .act-label { display: block; margin-bottom: 6px; font-size: 0.85rem; font-weight: 600; color: #4b5563; }
         .act-flex-row { display: flex; gap: 10px; }
@@ -196,7 +188,7 @@ const ActivationEntry = () => {
 
       {/* ================= DASHBOARD ================= */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold' }}>Dashboard Aktivasi</h2>
+        <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 'bold' }}>Dashboard Aktivasi</h2>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button onClick={fetchActivationData} style={{ padding: '8px 12px', background: '#e5e7eb', border: '1px solid #d1d5db', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>🔄 Refresh</button>
         </div>
@@ -234,19 +226,27 @@ const ActivationEntry = () => {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          ) : ( <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>Tidak ada data pada rentang waktu/site ini.</div> )}
+          ) : (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>Tidak ada data pada rentang waktu/site ini.</div>
+          )}
         </div>
       </div>
 
-      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #f3f4f6', overflowX: 'auto' }}>
-        <h3 style={{ margin: '0 0 15px 0' }}>Riwayat Pekerjaan</h3>
-        <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+      {/* DATA TABLE ACTIVATION (Dibatasi Tinggi Max 320px) */}
+      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #f3f4f6' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <h3 style={{ margin: '0' }}>Riwayat Pekerjaan</h3>
+          <span style={{ fontSize: '0.8rem', background: '#f3f4f6', padding: '4px 8px', borderRadius: '12px' }}>Showing {filteredData.length} entries</span>
+        </div>
+        <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '320px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px', fontSize: '0.85rem' }}>
-            <thead style={{ background: '#f9fafb' }}><tr>{['No FAB/FAT', 'ID Pelanggan', 'Pelanggan', 'Site', 'ISP', 'Service', 'Pekerjaan', 'Bandwidth', 'Tanggal', 'Aksi'].map(h=><th key={h} style={{padding:'12px 15px', color: '#4b5563'}}>{h}</th>)}</tr></thead>
+            <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>
+              <tr>{['No FAB/FAT', 'ID Pelanggan', 'Pelanggan', 'Site', 'ISP', 'Service', 'Pekerjaan', 'Bandwidth', 'Tanggal', 'Aksi'].map(h=><th key={h} style={{padding:'12px 15px', color: '#475569', borderBottom: '1px solid #e2e8f0'}}>{h}</th>)}</tr>
+            </thead>
             <tbody>
               {filteredData.map((r, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{padding:'10px 15px', fontWeight: '600'}}>{r["No: FAB/FAT"]}</td>
+                <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{padding:'10px 15px', fontWeight: '600', color: '#0f172a'}}>{r["No: FAB/FAT"]}</td>
                   <td style={{padding:'10px 15px'}}>{r["ID Pelanggan"]}</td>
                   <td style={{padding:'10px 15px'}}>{r["Nama Pelanggan"]}</td>
                   <td style={{padding:'10px 15px'}}>{r["Site"]}</td>
@@ -255,7 +255,7 @@ const ActivationEntry = () => {
                   <td style={{padding:'10px 15px'}}><span style={{ padding: '4px 8px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 'bold', backgroundColor: r["Tipe Pekerjaan"] === "Aktivasi" ? '#d1fae5' : r["Tipe Pekerjaan"] === "Upgrade" ? '#fef3c7' : '#fee2e2', color: r["Tipe Pekerjaan"] === "Aktivasi" ? '#059669' : r["Tipe Pekerjaan"] === "Upgrade" ? '#d97706' : '#dc2626' }}>{r["Tipe Pekerjaan"]}</span></td>
                   <td style={{padding:'10px 15px'}}>{r["Bandwidth"]}</td>
                   <td style={{padding:'10px 15px'}}>{r["Tanggal RFS"]}</td>
-                  <td style={{padding:'10px 15px'}}><button onClick={()=>setViewData(r)} style={{padding:'6px 12px', background: '#e5e7eb', borderRadius: '6px', border: '1px solid #d1d5db', cursor:'pointer', fontWeight: 'bold', fontSize: '0.75rem'}}>Lihat</button></td>
+                  <td style={{padding:'10px 15px'}}><button onClick={()=>setViewData(r)} style={{padding:'6px 12px', background: '#e2e8f0', color: '#334155', borderRadius: '6px', border: 'none', cursor:'pointer', fontWeight: 'bold', fontSize: '0.75rem'}}>Lihat</button></td>
                 </tr>
               ))}
             </tbody>
@@ -264,11 +264,11 @@ const ActivationEntry = () => {
       </div>
 
       {viewData && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '10px', boxSizing: 'border-box' }}>
-          <div style={{ background: '#fff', width: '100%', maxWidth: '700px', maxHeight: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #eee', background: '#f9fafb', borderRadius: '12px 12px 0 0' }}><h3 style={{ margin:0 }}>Detail: <span style={{color: '#3b82f6'}}>{viewData["No: FAB/FAT"]}</span></h3><button onClick={()=>setViewData(null)} style={{background:'none', border:'none', fontSize:'1.5rem', cursor:'pointer'}}>&times;</button></div>
-            <div style={{ padding: '20px', overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-              {Object.entries(viewData).map(([k, v]) => (!k.startsWith('_') && k.trim() ? <div key={k} style={{ background: '#f3f4f6', padding: '12px', borderRadius: '8px' }}><span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>{k}</span><div style={{ wordBreak: 'break-word', fontSize: '0.95rem', color: '#1f2937' }}>{v || '-'}</div></div> : null))}
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15, 23, 42, 0.75)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: '700px', maxHeight: '90vh', borderRadius: '16px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '20px 25px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '16px 16px 0 0' }}><h3 style={{ margin:0, color: '#0f172a' }}>Detail: <span style={{color: '#3b82f6'}}>{viewData["No: FAB/FAT"]}</span></h3><button onClick={()=>setViewData(null)} style={{background:'none', border:'none', fontSize:'1.5rem', color: '#94a3b8', cursor:'pointer'}}>&times;</button></div>
+            <div style={{ padding: '25px', overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              {Object.entries(viewData).map(([k, v]) => (!k.startsWith('_') && k.trim() ? <div key={k} style={{ background: '#f1f5f9', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}><span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>{k}</span><div style={{ wordBreak: 'break-word', fontSize: '0.95rem', color: '#1e293b', fontWeight: '500' }}>{v || '-'}</div></div> : null))}
             </div>
           </div>
         </div>
