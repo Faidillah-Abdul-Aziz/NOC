@@ -2,7 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import TicketEntry from './pages/TicketEntry'; 
 import Dashboard from './pages/Dashboard'; 
-import UpdateTicket from './pages/UpdateTicket'; // <-- IMPORT HALAMAN BARU
+import UpdateTicket from './pages/UpdateTicket'; 
+import ActivationEntry from './pages/ActivationEntry'; // <-- IMPORT INI
 
 function App() {
   return (
@@ -15,7 +16,8 @@ function App() {
           <div className="nav-menu">
             <Link to="/" className="nav-item">📝 Entry Ticket</Link>
             <Link to="/analytics" className="nav-item">📊 Dashboard Analytics</Link>
-            <Link to="/update" className="nav-item">⚙️ Update Ticket</Link> {/* <-- MENU BARU */}
+            <Link to="/update" className="nav-item">⚙️ Update Ticket</Link>
+            <Link to="/activation" className="nav-item">🚀 Input Activation</Link> {/* <-- MENU BARU */}
           </div>
         </div>
 
@@ -24,7 +26,8 @@ function App() {
           <Routes>
             <Route path="/" element={<TicketEntry />} />
             <Route path="/analytics" element={<Dashboard />} /> 
-            <Route path="/update" element={<UpdateTicket />} /> {/* <-- ROUTE BARU */}
+            <Route path="/update" element={<UpdateTicket />} />
+            <Route path="/activation" element={<ActivationEntry />} /> {/* <-- ROUTE BARU */}
           </Routes>
         </div>
 
