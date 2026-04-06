@@ -225,7 +225,7 @@ const ActivationEntry = ({ isDarkMode, toggleDarkMode }) => {
               <div className="update-input-group">
                 <label className="update-label">Tipe Pekerjaan</label>
                 <select className="update-input" name="Tipe Pekerjaan" value={formData["Tipe Pekerjaan"]} onChange={handleChange} required>
-                  <option value="Aktivasi">Aktivasi</option><option value="Terminasi">Terminasi</option><option value="Upgrade">Upgrade</option>
+                  <option value="Aktivasi">Aktivasi</option><option value="Terminasi">Terminasi</option><option value="Upgrade">Upgrade</option><option value="Pergantian">Pergantian</option>
                 </select>
               </div>
               <div className="update-input-group">
