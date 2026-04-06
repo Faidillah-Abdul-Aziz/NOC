@@ -1,50 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { API_URL } from '../config';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import Select from 'react-select'; 
 
 const getCurrentWeekStr = () => {
   const today = new Date();
-  const dateObj = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  dateObj.setDate(dateObj.getDate() + 4 - (dateObj.getDay() || 7));
-  const yearStart = new Date(dateObj.getFullYear(), 0, 1);
-  const weekNo = Math.ceil((((dateObj - yearStart) / 86400000) + 1) / 7);
+  const current = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  const jan1 = new Date(Date.UTC(today.getFullYear(), 0, 1));
+  const dayOfJan1 = jan1.getUTCDay();
+  const daysToFirstWed = (3 - dayOfJan1 + 7) % 7;
+  const firstWed = new Date(Date.UTC(today.getFullYear(), 0, 1 + daysToFirstWed));
+  
+  let weekNo = current < firstWed ? 1 : Math.floor(Math.round((current - firstWed) / 86400000) / 7) + 2;
   return `W${weekNo}`; 
 };
 
 const parseDateToYYYYMMDD = (dateString) => {
   if (!dateString) return "";
   if (dateString.includes('/')) {
-    const datePart = dateString.split(' ')[0]; 
-    const parts = datePart.split('/');
-    if (parts.length === 3) {
-      const day = parts[0].padStart(2, '0');
-      const month = parts[1].padStart(2, '0');
-      const year = parts[2];
-      return `${year}-${month}-${day}`; 
-    }
+    const parts = dateString.split(' ')[0].split('/');
+    if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
   }
-  if (dateString.includes('-')) {
-    return dateString.split('T')[0].split(' ')[0];
-  }
+  if (dateString.includes('-')) return dateString.split('T')[0].split(' ')[0];
   return "";
+};
+
+const checkIsVIP = (item) => {
+  return Object.values(item).some(val => typeof val === 'string' && val.trim().toUpperCase() === 'VIP');
 };
 
 const Dashboard = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false); 
+  const [isKioskMode, setIsKioskMode] = useState(false); 
   
-  // State Filter Global (Analytics Overview)
   const [filterType, setFilterType] = useState('Week'); 
   const [filterValue, setFilterValue] = useState(getCurrentWeekStr());
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   
-  // --- STATE TOGGLE RCA (BARU) ---
-  // Default: 'Global' (Analytics Overview). Opsi lain: 'Table' (Ticket Details)
   const [rcaDataSource, setRcaDataSource] = useState('Global'); 
   
-  // State Filter Tabel Details
   const [tableStartDate, setTableStartDate] = useState(''); 
   const [tableEndDate, setTableEndDate] = useState('');     
   const [searchCustomer, setSearchCustomer] = useState(''); 
@@ -66,14 +63,46 @@ const Dashboard = () => {
       }
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
+
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    let interval;
+    if (isKioskMode) {
+      interval = setInterval(() => { fetchData(); }, 300000); 
+    }
+    return () => clearInterval(interval);
+  }, [isKioskMode]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => { setIsKioskMode(!!document.fullscreenElement); };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      mainContent.style.backgroundColor = isDarkMode ? '#0f172a' : '#f1f5f9';
+    }
+    return () => { if (mainContent) mainContent.style.backgroundColor = '#f1f5f9'; };
+  }, [isDarkMode]);
+
+  const toggleKioskMode = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        alert(`Error enabling fullscreen mode: ${err.message}`);
+      });
+    } else {
+      if (document.exitFullscreen) { document.exitFullscreen(); }
+    }
+  };
 
   const uniqueMonths = [...new Set(data.map(item => item["Month"]).filter(Boolean))];
   let uniqueWeeks = [...new Set(data.map(item => item["Week"]).filter(val => val && val.startsWith('W')))];
   if (!uniqueWeeks.includes(getCurrentWeekStr())) uniqueWeeks.push(getCurrentWeekStr());
   uniqueWeeks.sort((a,b)=>parseInt(a.replace(/\D/g,''))-parseInt(b.replace(/\D/g,'')));
 
-  // 1. DATA GLOBAL (ANALYTICS OVERVIEW)
   const filteredData = data.filter(item => {
     if (filterType === 'Month') return item["Month"] === filterValue;
     if (filterType === 'Week') return item["Week"] === filterValue;
@@ -103,21 +132,18 @@ const Dashboard = () => {
   const entPerc = enterpriseData.length > 0 ? ((enterpriseInSLA / enterpriseData.length) * 100).toFixed(1) : 0;
 
   const pieData = totalTT > 0 ? [{ name: 'Closed TT', value: completedTT }, { name: 'Open TT', value: activeTT }] : [{ name: 'No Data', value: 1 }];
-  const PIE_COLORS = totalTT > 0 ? ['#10b981', '#f59e0b'] : ['#e5e7eb']; 
+  const PIE_COLORS = totalTT > 0 ? ['#10b981', '#f59e0b'] : [isDarkMode ? '#334155' : '#e5e7eb']; 
 
   const renderCustomLabel = ({ cx, cy, midAngle, outerRadius, value, index }) => {
     if (value === 0 || totalTT === 0) return null; 
-    const RADIAN = Math.PI / 180;
-    const radius = outerRadius + 15; 
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    const RADIAN = Math.PI / 180; const radius = outerRadius + 15; 
+    const x = cx + radius * Math.cos(-midAngle * RADIAN); const y = cy + radius * Math.sin(-midAngle * RADIAN);
     return (<text x={x} y={y} fill={PIE_COLORS[index % PIE_COLORS.length]} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontWeight="bold" fontSize="16">{value}</text>);
   };
 
   const siteOptions = [...new Set(filteredData.map(i => i["Site"]).filter(Boolean))].map(s => ({ value: s, label: s }));
   const uniqueClusters = [...new Set(filteredData.map(i => i["Cluster"]).filter(Boolean))];
 
-  // 2. DATA TABEL (TICKET DETAILS)
   let baseTableData = (tableStartDate || tableEndDate) ? data : filteredData;
   let tableDataProcessed = [...baseTableData].filter(i => {
     if (tableStartDate || tableEndDate) {
@@ -126,7 +152,6 @@ const Dashboard = () => {
       if (tableStartDate && formattedItemDate < tableStartDate) return false;
       if (tableEndDate && formattedItemDate > tableEndDate) return false;
     }
-
     if (tableDetailFilter === 'Active' && !i["Status TT"]?.toLowerCase().includes("open")) return false;
     if (tableDetailFilter === 'Out SLA' && !i["SLA Real"]?.toLowerCase().includes("out")) return false;
     if (tableDetailFilter === 'Overdue MTTR' && !(i["Status TT"]?.toLowerCase().includes("open") && i["SLA Real"]?.toLowerCase().includes("out"))) return false;
@@ -134,91 +159,165 @@ const Dashboard = () => {
     if (tableSla === 'Out SLA' && !i["SLA Real"]?.toLowerCase().includes("out")) return false;
     if (tableCluster !== 'All' && i["Cluster"] !== tableCluster) return false;
     if (tableCategory !== 'All' && i["Category"] !== tableCategory) return false;
-    if (tableSite.length > 0 && !tableSite.some(opt => opt.value === i["Site"])) return false;
+    
+    const hasSiteFilter = tableSite.length > 0;
+    const searchTerms = searchCustomer.trim().toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
+    const hasSearchFilter = searchTerms.length > 0;
 
-    if (searchCustomer.trim() !== '') {
-      const terms = searchCustomer.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
-      if (terms.length > 0) {
-        const customerInfo = (i["ID dan Nama Customer"] || "").toLowerCase();
-        const ttNo = (i["TT No"] || "").toLowerCase();
-        if (!terms.some(term => customerInfo.includes(term) || ttNo.includes(term))) return false;
+    if (hasSiteFilter || hasSearchFilter) {
+      let matchSite = false; if (hasSiteFilter) matchSite = tableSite.some(opt => opt.value === i["Site"]);
+      let matchSearch = false;
+      if (hasSearchFilter) {
+        const customerInfo = (i["ID dan Nama Customer"] || "").toLowerCase(); const ttNo = (i["TT No"] || "").toLowerCase();
+        matchSearch = searchTerms.some(term => customerInfo.includes(term) || ttNo.includes(term));
       }
+      if (hasSiteFilter && hasSearchFilter) { if (!matchSite && !matchSearch) return false; } 
+      else if (hasSiteFilter && !matchSite) return false;
+      else if (hasSearchFilter && !matchSearch) return false;
     }
     return true;
   });
 
-  // 3. DATA RCA (MENGIKUTI TOGGLE YANG DIPILIH OLEH USER)
-  const rcaFilteredData = rcaDataSource === 'Global' ? filteredData : tableDataProcessed;
-  
-  const rootCauseCounts = rcaFilteredData.reduce((acc, i) => { 
-    acc[i["Root Cause"] || "Unspecified"] = (acc[i["Root Cause"] || "Unspecified"] || 0) + 1; 
-    return acc; 
-  }, {});
+  let baseRcaData = rcaDataSource === 'Global' ? filteredData : tableDataProcessed;
+  const rootCauseCounts = baseRcaData.reduce((acc, i) => { acc[i["Root Cause"] || "Unspecified"] = (acc[i["Root Cause"] || "Unspecified"] || 0) + 1; return acc; }, {});
   const barData = Object.keys(rootCauseCounts).map(k => ({ name: k, Total: rootCauseCounts[k] })).sort((a,b)=>b.Total-a.Total);
 
+  let cumulativeMttr = 0;
+  const mttrDataAnalysis = uniqueWeeks.map((wk, idx) => {
+    const wkData = data.filter(d => d.Week === wk);
+    const vipData = wkData.filter(d => checkIsVIP(d));
+    const nonVipData = wkData.filter(d => !checkIsVIP(d));
+
+    const calcSla = (arr) => arr.length === 0 ? 0 : (arr.filter(d => String(d["SLA Real"]).toLowerCase().includes("in")).length / arr.length) * 100;
+    
+    const vipAchieve = calcSla(vipData);
+    const nonVipAchieve = calcSla(nonVipData);
+    const mttr = (vipData.length === 0 && nonVipData.length === 0) ? 0 : (vipAchieve + nonVipAchieve) / 2;
+
+    cumulativeMttr += mttr;
+    const mttrYtd = cumulativeMttr / (idx + 1);
+
+    return { 
+      name: wk, 
+      "VIP SLA": vipAchieve, 
+      "Non-VIP SLA": nonVipAchieve, 
+      "MTTR": mttr, 
+      "MTTR YTD": mttrYtd, 
+      "Target": 99 
+    };
+  });
+
   const exportToExcel = () => {
-    if (tableDataProcessed.length === 0) {
-      alert("Tidak ada data untuk didownload sesuai filter saat ini.");
-      return;
-    }
+    if (tableDataProcessed.length === 0) { alert("Tidak ada data untuk didownload sesuai filter saat ini."); return; }
     const allHeaders = Object.keys(tableDataProcessed[0]);
-    let tableHTML = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
-    tableHTML += '<head><meta charset="UTF-8"></head><body>';
-    tableHTML += '<table border="1" style="font-family: Calibri, sans-serif; border-collapse: collapse;">';
-    tableHTML += '<thead><tr>';
+    let tableHTML = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><table border="1" style="font-family: Calibri, sans-serif; border-collapse: collapse;"><thead><tr>';
     allHeaders.forEach(h => { tableHTML += `<th style="background-color: #3b82f6; color: #ffffff; padding: 10px; font-weight: bold;">${h}</th>`; });
     tableHTML += '</tr></thead><tbody>';
-    
     tableDataProcessed.forEach(row => {
       tableHTML += '<tr>';
       allHeaders.forEach(h => {
-        let val = row[h];
-        if (val === undefined || val === null) val = '';
+        let val = row[h] === undefined || row[h] === null ? '' : row[h];
         if (typeof val === 'string') val = val.replace(/(\r\n|\n|\r)/gm, " "); 
         tableHTML += `<td style='padding: 5px; mso-number-format:"\\@";'>${val}</td>`;
       });
       tableHTML += '</tr>';
     });
     tableHTML += '</tbody></table></body></html>';
-    
     const blob = new Blob(['\uFEFF' + tableHTML], { type: 'application/vnd.ms-excel' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Report_NOC_Tickets_${new Date().toISOString().split('T')[0]}.xls`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const link = document.createElement('a'); link.href = url; link.download = `Report_NOC_Tickets_${new Date().toISOString().split('T')[0]}.xls`;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
+  const tableHeaders = ['TT No', 'Customer', 'Cluster', 'Root Cause', 'Category', 'Deskripsi Awal', 'Progress Update', 'NOC'];
+  if (!isKioskMode) tableHeaders.push('Aksi');
+  tableHeaders.push('SLA', 'Status');
+
   return (
-    <div className="dash-wrapper">
+    <div className={`dash-wrapper ${isDarkMode ? 'dark' : ''}`}>
+      
+      {isKioskMode && (
+        <style>{`
+          .sidebar { display: none !important; }
+          .toggle-menu-btn { display: none !important; }
+          .dash-header { padding-left: 0 !important; }
+        `}</style>
+      )}
+
       <style>{`
-        .dash-wrapper { padding: 20px; color: #1f2937; font-family: sans-serif; box-sizing: border-box; width: 100%; overflow-x: hidden; }
-        .dash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
-        .dash-header-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-        .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 25px; }
-        .metric-card { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #f3f4f6; display: flex; flex-direction: column; justify-content: center; }
-        .middle-grid { display: grid; grid-template-columns: 1.2fr 1fr 1.5fr; gap: 20px; margin-bottom: 25px; align-items: stretch; }
-        .middle-card { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #f3f4f6; display: flex; flex-direction: column; }
-        .sla-split { display: flex; gap: 20px; flex: 1; margin-top: 20px; }
-        .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; width: 100%; }
-        .filter-input { padding: 8px 12px; border-radius: 6px; border: 1px solid #d1d5db; font-size: 0.85rem; flex: 1 1 150px; min-width: 120px; background: #fff; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        .dash-wrapper { 
+          --bg-main: transparent; 
+          --bg-card: #ffffff; --text-main: #0f172a; --text-muted: #64748b; 
+          --border: #e2e8f0; --input-bg: #ffffff; --table-hover: #f8fafc; --accent: #3b82f6;
+          --gap: 24px; --card-padding: 24px; --border-radius: 12px;
+          padding: 16px var(--gap) var(--gap) var(--gap); 
+          color: var(--text-main); font-family: 'Inter', sans-serif; 
+          min-height: 100vh; transition: color 0.3s; width: 100%; box-sizing: border-box;
+        }
+        .dash-wrapper.dark { 
+          --bg-card: #1e293b; --text-main: #f8fafc; --text-muted: #94a3b8; 
+          --border: #334155; --input-bg: #0f172a; --table-hover: #334155; --accent: #60a5fa;
+        }
+
+        .dash-header { 
+          display: flex; justify-content: space-between; align-items: center; 
+          margin-bottom: 20px; flex-wrap: wrap; gap: 16px; 
+          padding-left: 45px; 
+          min-height: 40px;
+        }
+        .dash-header-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+        
+        .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); margin-bottom: var(--gap); }
+        .metric-card { background: var(--bg-card); border-radius: var(--border-radius); padding: var(--card-padding); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        
+        .middle-grid { display: grid; grid-template-columns: 1.2fr 1fr 1.5fr; gap: var(--gap); margin-bottom: var(--gap); align-items: stretch; }
+        .middle-card { background: var(--bg-card); padding: var(--card-padding); border-radius: var(--border-radius); border: 1px solid var(--border); display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: var(--gap); }
+        .sla-split { display: flex; gap: 16px; flex: 1; margin-top: 16px; }
+        
+        .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; width: 100%; margin-bottom: 16px; align-items: center; }
+        .filter-input { height: 34px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 0.85rem; flex: 1 1 150px; min-width: 120px; background: var(--input-bg); color: var(--text-main); box-sizing: border-box; outline: none; }
+        .filter-input[type="date"]::-webkit-calendar-picker-indicator { filter: ${isDarkMode ? 'invert(1)' : 'none'}; cursor: pointer; }
         .filter-select-container { flex: 1 1 200px; min-width: 150px; }
         
-        .toggle-btn { padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.85rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .toggle-active-global { background: #fff; color: #3b82f6; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .toggle-active-table { background: #fff; color: #10b981; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .toggle-inactive { background: transparent; color: #64748b; }
+        .btn-primary { height: 34px; padding: 0 14px; background: #10b981; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; transition: 0.2s; font-size: 0.85rem; }
+        .btn-primary:hover { background: #059669; }
+        .btn-secondary { height: 34px; padding: 0 14px; background: var(--input-bg); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; transition: 0.2s; font-size: 0.85rem; }
+        .btn-secondary:hover { background: var(--table-hover); }
 
-        @media (max-width: 1024px) { .middle-grid { grid-template-columns: 1fr; } }
+        .toggle-container { display: inline-flex; background: var(--input-bg); border-radius: 8px; padding: 3px; border: 1px solid var(--border); height: 34px; box-sizing: border-box; }
+        .toggle-btn { padding: 0 14px; height: 100%; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; transition: 0.2s; display: flex; align-items: center; }
+        .toggle-active-global { background: var(--bg-card); color: #3b82f6; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
+        .toggle-active-table { background: var(--bg-card); color: #10b981; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
+        .toggle-inactive { background: transparent; color: var(--text-muted); }
+        
+        .table-container { overflow-x: auto; overflow-y: auto; max-height: ${isKioskMode ? '600px' : '400px'}; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; min-width: 1000px; }
+        thead th { position: sticky; top: 0; background-color: var(--input-bg); color: var(--text-muted); padding: 12px 14px; border-bottom: 2px solid var(--border); font-weight: 600; z-index: 1; white-space: nowrap; }
+        tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+        tbody tr:hover { background-color: var(--table-hover); }
+        tbody td { padding: 10px 14px; color: var(--text-main); }
+
+        .mttr-container { display: flex; flex-direction: column; gap: var(--gap); }
+        .mttr-chart-box { height: 350px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); padding: 16px; box-sizing: border-box; }
+        .mttr-table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); }
+        .matrix-table { width: 100%; min-width: max-content; }
+        .matrix-table th { background-color: var(--input-bg); border-bottom: 1px solid var(--border); text-align: center; padding: 12px 8px; }
+        .matrix-table td { text-align: center; font-weight: 600; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 10px 8px; white-space: nowrap; }
+        .matrix-table tbody tr:last-child td { border-bottom: none; }
+        .sticky-col { position: sticky; left: 0; background-color: var(--input-bg); z-index: 2; border-right: 2px solid var(--border) !important; text-align: left !important; padding-left: 14px !important; }
+
         @media (max-width: 768px) {
-          .dash-wrapper { padding: 10px; }
-          .dash-header { flex-direction: column; align-items: stretch; }
+          .dash-wrapper { padding: 12px; --gap: 16px; --card-padding: 16px; }
+          .dash-header { padding-left: 0; flex-direction: column; align-items: stretch; margin-top: 40px; }
           .dash-header-controls { justify-content: flex-start; }
-          .dash-header-controls > select { flex: 1 1 100%; }
-          .metrics-grid { grid-template-columns: 1fr; gap: 15px; } 
-          .sla-split { flex-direction: column; gap: 15px; } 
+          .metrics-grid { grid-template-columns: 1fr; } 
+          .middle-grid { grid-template-columns: 1fr; }
+          .sla-split { flex-direction: column; gap: 12px; } 
           .filter-bar { flex-direction: column; align-items: stretch; }
           .filter-input, .filter-select-container { width: 100%; flex: 1 1 100%; }
         }
@@ -226,79 +325,89 @@ const Dashboard = () => {
 
       {/* HEADER & GLOBAL FILTER */}
       <div className="dash-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <h2 style={{ fontSize: '1.75rem', fontWeight: 'bold', margin: 0 }}>Analytics Overview</h2>
-          <button onClick={fetchData} disabled={loading} style={{ padding: '6px 12px', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}>🔄 Refresh</button>
-        </div>
-        <div className="dash-header-controls">
-          <select className="filter-input" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterValue(''); setStartDate(''); setEndDate(''); }} style={{ maxWidth: '150px' }}>
-            <option value="All">All Time</option><option value="Month">By Month</option><option value="Week">By Week</option><option value="Date Range">Date Range</option>
-          </select>
-          {filterType === 'Month' && <select className="filter-input" value={filterValue} onChange={e=>setFilterValue(e.target.value)} style={{ maxWidth: '150px' }}><option value="">-- Pilih Bulan --</option>{uniqueMonths.map(m => <option key={m} value={m}>{m}</option>)}</select>}
-          {filterType === 'Week' && <select className="filter-input" value={filterValue} onChange={e=>setFilterValue(e.target.value)} style={{ maxWidth: '150px' }}><option value="">-- Pilih Minggu --</option>{uniqueWeeks.map(w => <option key={w} value={w}>{w}</option>)}</select>}
-          
-          {filterType === 'Date Range' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <input type="date" className="filter-input" value={startDate} onChange={e=>setStartDate(e.target.value)} />
-              <span style={{ fontWeight: 'bold', color: '#6b7280' }}>to</span>
-              <input type="date" className="filter-input" value={endDate} onChange={e=>setEndDate(e.target.value)} />
-            </div>
-          )}
-        </div>
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: 0, color: 'var(--text-main)' }}>Enterprise NOC Dashboard</h2>
+        
+        {!isKioskMode && (
+          <div className="dash-header-controls">
+            <button className="btn-secondary" onClick={fetchData} disabled={loading}>Refresh</button>
+            <button className="btn-secondary" onClick={() => setIsDarkMode(!isDarkMode)}>
+              {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+            </button>
+            <button className="btn-primary" onClick={toggleKioskMode} style={{ background: '#8b5cf6' }}>
+              TV Mode
+            </button>
+            
+            <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 4px' }}></div>
+
+            <select className="filter-input" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterValue(''); setStartDate(''); setEndDate(''); }} style={{ maxWidth: '130px' }}>
+              <option value="All">All Time</option><option value="Month">By Month</option><option value="Week">By Week</option><option value="Date Range">Date Range</option>
+            </select>
+            {filterType === 'Month' && <select className="filter-input" value={filterValue} onChange={e=>setFilterValue(e.target.value)} style={{ maxWidth: '130px' }}><option value="">-- Pilih Bulan --</option>{uniqueMonths.map(m => <option key={m} value={m}>{m}</option>)}</select>}
+            {filterType === 'Week' && <select className="filter-input" value={filterValue} onChange={e=>setFilterValue(e.target.value)} style={{ maxWidth: '130px' }}><option value="">-- Pilih Minggu --</option>{uniqueWeeks.map(w => <option key={w} value={w}>{w}</option>)}</select>}
+            {filterType === 'Date Range' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <input type="date" className="filter-input" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{ maxWidth: '120px' }} />
+                <span style={{ fontWeight: 'bold', color: 'var(--text-muted)' }}>-</span>
+                <input type="date" className="filter-input" value={endDate} onChange={e=>setEndDate(e.target.value)} style={{ maxWidth: '120px' }} />
+              </div>
+            )}
+          </div>
+        )}
       </div>
       
       {/* ROW 1: METRICS */}
       <div className="metrics-grid">
-        <div className="metric-card" style={{ borderLeft: '6px solid #3b82f6' }}><p style={{margin:0, fontSize:'0.85rem', color:'#6b7280', fontWeight:'bold'}}>TOTAL TICKETS</p><h3 style={{margin:'5px 0 0', fontSize:'2.2rem', color:'#111827'}}>{totalTT}</h3></div>
-        <div className="metric-card" style={{ borderLeft: '6px solid #f59e0b' }}><p style={{margin:0, fontSize:'0.85rem', color:'#6b7280', fontWeight:'bold'}}>ACTIVE TICKETS (OPEN)</p><h3 style={{margin:'5px 0 0', fontSize:'2.2rem', color:'#111827'}}>{activeTT}</h3></div>
-        <div className="metric-card" style={{ borderLeft: '6px solid #ef4444' }}><p style={{margin:0, fontSize:'0.85rem', color:'#6b7280', fontWeight:'bold'}}>OVERDUE MTTR (OUT SLA & OPEN)</p><h3 style={{margin:'5px 0 0', fontSize:'2.2rem', color:'#ef4444'}}>{overdueMTTR}</h3></div>
+        <div className="metric-card" style={{ borderLeft: '6px solid #3b82f6' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Total Tickets</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'var(--text-main)'}}>{totalTT}</h3></div>
+        <div className="metric-card" style={{ borderLeft: '6px solid #f59e0b' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Active Tickets (Open)</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'var(--text-main)'}}>{activeTT}</h3></div>
+        <div className="metric-card" style={{ borderLeft: '6px solid #ef4444' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Overdue MTTR</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'#ef4444'}}>{overdueMTTR}</h3></div>
       </div>
 
       {/* ROW 2: PIE & SLA PERFORMANCE */}
       <div className="middle-grid">
-        <div className="middle-card">
-          <h4 style={{ margin: '0 0 10px', color: '#374151' }}>TT by Status</h4>
+        <div className="middle-card" style={{ marginBottom: 0 }}>
+          <h4 style={{ margin: '0 0 16px', color: 'var(--text-main)' }}>TT by Status</h4>
           <div style={{ flex: 1, minHeight: 250 }}>
             <ResponsiveContainer>
               <PieChart>
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none" label={renderCustomLabel} labelLine={false}>
                   {pieData.map((e, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                 </Pie>
-                <Tooltip /><Legend />
+                <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', color: isDarkMode ? '#f8fafc' : '#0f172a', borderRadius: '8px' }} />
+                <Legend wrapperStyle={{ color: 'var(--text-muted)', fontSize: '0.85rem' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '20px', borderRadius: '12px', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <p style={{margin:0, fontSize:'0.85rem', color:'#166534', fontWeight:'bold'}}>COMPLETED TT</p>
-            <h2 style={{margin:'5px 0 0', fontSize:'2.5rem', color:'#166534'}}>{completedTT}</h2>
+          <div style={{ backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.1)' : '#f0fdf4', border: `1px solid ${isDarkMode ? '#065f46' : '#bbf7d0'}`, padding: 'var(--card-padding)', borderRadius: 'var(--border-radius)', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <p style={{margin:0, fontSize:'0.85rem', color:'#10b981', fontWeight:'bold'}}>COMPLETED TT</p>
+            <h2 style={{margin:'8px 0 0', fontSize:'2.5rem', color:'#10b981'}}>{completedTT}</h2>
           </div>
           <div className="sla-split">
-            <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', padding: '15px', borderRadius: '12px', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ backgroundColor: isDarkMode ? 'rgba(5, 150, 105, 0.1)' : '#ecfdf5', border: `1px solid ${isDarkMode ? '#064e3b' : '#a7f3d0'}`, padding: '16px', borderRadius: 'var(--border-radius)', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <p style={{margin:0, fontSize:'0.8rem', color:'#059669', fontWeight:'bold'}}>IN SLA</p>
-              <h3 style={{margin:'5px 0 0', fontSize:'1.8rem', color:'#059669'}}>{inSLA}</h3>
+              <h3 style={{margin:'8px 0 0', fontSize:'1.8rem', color:'#059669'}}>{inSLA}</h3>
             </div>
-            <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', padding: '15px', borderRadius: '12px', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <p style={{margin:0, fontSize:'0.8rem', color:'#dc2626', fontWeight:'bold'}}>OUT SLA</p>
-              <h3 style={{margin:'5px 0 0', fontSize:'1.8rem', color:'#dc2626'}}>{outSLA}</h3>
+            <div style={{ backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.1)' : '#fef2f2', border: `1px solid ${isDarkMode ? '#7f1d1d' : '#fecaca'}`, padding: '16px', borderRadius: 'var(--border-radius)', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <p style={{margin:0, fontSize:'0.8rem', color:'#ef4444', fontWeight:'bold'}}>OUT SLA</p>
+              <h3 style={{margin:'8px 0 0', fontSize:'1.8rem', color:'#ef4444'}}>{outSLA}</h3>
             </div>
           </div>
         </div>
 
-        <div className="middle-card" style={{ justifyContent: 'center' }}>
-          <h4 style={{ margin: '0 0 20px', color: '#374151' }}>SLA Performance by Category</h4>
-          <div style={{ marginBottom: '25px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '8px' }}><span>Retail <span style={{color:'#10b981'}}>{retailPerc}% In SLA</span></span><span style={{color:'#6b7280'}}>Total: {retailData.length}</span></div>
-            <div style={{ display: 'flex', height: '28px', borderRadius: '6px', overflow: 'hidden', background: '#e5e7eb' }}>
+        <div className="middle-card" style={{ justifyContent: 'center', marginBottom: 0 }}>
+          <h4 style={{ margin: '0 0 24px', color: 'var(--text-main)' }}>SLA Performance by Category</h4>
+          <div style={{ marginBottom: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>Retail <span style={{color:'#10b981'}}>{retailPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {retailData.length}</span></div>
+            <div style={{ display: 'flex', height: '30px', borderRadius: '8px', overflow: 'hidden', background: isDarkMode ? '#334155' : '#e2e8f0' }}>
               <div style={{ width: `${(retailInSLA/retailData.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{retailInSLA||''}</div>
               <div style={{ width: `${(retailOutSLA/retailData.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{retailOutSLA||''}</div>
             </div>
           </div>
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '8px' }}><span>Enterprise <span style={{color:'#10b981'}}>{entPerc}% In SLA</span></span><span style={{color:'#6b7280'}}>Total: {enterpriseData.length}</span></div>
-            <div style={{ display: 'flex', height: '28px', borderRadius: '6px', overflow: 'hidden', background: '#e5e7eb' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>Enterprise <span style={{color:'#10b981'}}>{entPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {enterpriseData.length}</span></div>
+            <div style={{ display: 'flex', height: '30px', borderRadius: '8px', overflow: 'hidden', background: isDarkMode ? '#334155' : '#e2e8f0' }}>
               <div style={{ width: `${(enterpriseInSLA/enterpriseData.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{enterpriseInSLA||''}</div>
               <div style={{ width: `${(enterpriseOutSLA/enterpriseData.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{enterpriseOutSLA||''}</div>
             </div>
@@ -306,134 +415,194 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* ROW 3: RCA CHART DENGAN TOGGLE */}
-      <div className="middle-card" style={{ marginBottom: '25px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '15px' }}>
-          <h3 style={{ margin: 0, color: '#374151' }}>Root Cause Analysis</h3>
+      {/* ROW 3: RCA CHART (FULL WIDTH) */}
+      <div className="middle-card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+          <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem' }}>Root Cause Analysis</h3>
           
-          {/* SWITCH TOGGLE DATA SOURCE */}
-          <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '4px', border: '1px solid #cbd5e1' }}>
-            <button 
-              onClick={() => setRcaDataSource('Global')} 
-              className={`toggle-btn ${rcaDataSource === 'Global' ? 'toggle-active-global' : 'toggle-inactive'}`}
-            >
-              Analytics Overview
-            </button>
-            <button 
-              onClick={() => setRcaDataSource('Table')} 
-              className={`toggle-btn ${rcaDataSource === 'Table' ? 'toggle-active-table' : 'toggle-inactive'}`}
-            >
-              Ticket Details
-            </button>
-          </div>
+          {!isKioskMode && (
+            <div className="toggle-container">
+              <button onClick={() => setRcaDataSource('Global')} className={`toggle-btn ${rcaDataSource === 'Global' ? 'toggle-active-global' : 'toggle-inactive'}`}>Analytics</button>
+              <button onClick={() => setRcaDataSource('Table')} className={`toggle-btn ${rcaDataSource === 'Table' ? 'toggle-active-table' : 'toggle-inactive'}`}>Table</button>
+            </div>
+          )}
         </div>
-
-        <div style={{ width: '100%', height: 300 }}>
+        <div style={{ width: '100%', height: 320 }}>
           {barData.length > 0 ? (
             <ResponsiveContainer>
-              <BarChart data={barData} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} />
-                <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}} />
-                <Bar dataKey="Total" fill={rcaDataSource === 'Global' ? "#3b82f6" : "#10b981"} radius={[4, 4, 0, 0]} barSize={40}>
-                  <LabelList dataKey="Total" position="top" fill="#4b5563" fontSize={12} fontWeight="bold" />
+              <BarChart data={barData} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#e2e8f0'} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12}} />
+                <RechartsTooltip cursor={{fill: isDarkMode ? '#334155' : '#f1f5f9'}} contentStyle={{backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#475569' : '#e2e8f0', color: isDarkMode ? '#f8fafc' : '#0f172a', borderRadius: '8px'}} />
+                <Bar dataKey="Total" fill={rcaDataSource === 'Global' ? "#3b82f6" : "#10b981"} radius={[4, 4, 0, 0]} barSize={45}>
+                  <LabelList dataKey="Total" position="top" fill={isDarkMode ? '#f8fafc' : '#334155'} fontSize={12} fontWeight="bold" offset={10} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          ) : ( <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>Data tidak ditemukan sesuai filter.</div> )}
+          ) : ( <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Data tidak ditemukan.</div> )}
         </div>
       </div>
 
-      {/* ROW 4: DATA TABLE */}
+      {/* ROW 4: DATA TABLE TICKET DETAILS */}
       <div className="middle-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '15px' }}>
-          <div>
-            <h3 style={{ margin: 0, display: 'inline-block', marginRight: '10px' }}>Ticket Details</h3>
-            <span style={{ fontSize: '0.8rem', background: '#f3f4f6', padding: '4px 8px', borderRadius: '12px' }}>Showing {tableDataProcessed.length} entries</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem' }}>Ticket Details</h3>
+            <span style={{ fontSize: '0.8rem', background: 'var(--table-hover)', padding: '6px 12px', borderRadius: '20px', color: 'var(--text-muted)', fontWeight: 'bold' }}>{tableDataProcessed.length} entries</span>
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>Filter Tanggal:</span>
-              <input type="date" value={tableStartDate} onChange={e=>setTableStartDate(e.target.value)} style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }} />
-              <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 'bold' }}>-</span>
-              <input type="date" value={tableEndDate} onChange={e=>setTableEndDate(e.target.value)} style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }} />
-              {(tableStartDate || tableEndDate) && (
-                <button onClick={() => { setTableStartDate(''); setTableEndDate(''); }} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 'bold', cursor: 'pointer', padding: '0 4px', fontSize: '1rem' }} title="Reset Filter Tanggal">✕</button>
-              )}
+          {!isKioskMode && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--table-hover)', padding: '0 8px', borderRadius: '8px', border: '1px solid var(--border)', height: '34px', boxSizing: 'border-box' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-muted)', paddingLeft: '8px' }}>Filter:</span>
+                <input type="date" value={tableStartDate} onChange={e=>setTableStartDate(e.target.value)} style={{ padding: '0 8px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '0.8rem', background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none' }} />
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>-</span>
+                <input type="date" value={tableEndDate} onChange={e=>setTableEndDate(e.target.value)} style={{ padding: '0 8px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '0.8rem', background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none' }} />
+                {(tableStartDate || tableEndDate) && <button onClick={() => { setTableStartDate(''); setTableEndDate(''); }} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 'bold', cursor: 'pointer', padding: '0 8px', fontSize: '1rem' }}>✕</button>}
+              </div>
+              <button className="btn-primary" onClick={exportToExcel}>Download Excel</button>
             </div>
-            <button onClick={exportToExcel} style={{ padding: '8px 16px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 4px rgba(16,185,129,0.2)' }}>
-              📥 Download Excel (Full)
-            </button>
-          </div>
+          )}
         </div>
 
-        <div className="filter-bar" style={{ marginBottom: '15px' }}>
-          <input type="text" placeholder="Cari ID/Nama/TT (koma)..." value={searchCustomer} onChange={e=>setSearchCustomer(e.target.value)} className="filter-input" />
-          <select value={tableSla} onChange={e=>setTableSla(e.target.value)} className="filter-input"><option value="All">All SLA</option><option value="In SLA">In SLA</option><option value="Out SLA">Out SLA</option></select>
-          <select value={tableCategory} onChange={e=>setTableCategory(e.target.value)} className="filter-input"><option value="All">All Category</option><option value="Retail">Retail</option><option value="Enterprise">Enterprise</option></select>
-          <div className="filter-select-container"><Select isMulti options={siteOptions} value={tableSite} onChange={setTableSite} placeholder="Sites..." styles={{ control: (b) => ({...b, minHeight:'34px', borderRadius:'6px', borderColor:'#d1d5db'}) }} menuPortalTarget={document.body} /></div>
-          <select value={tableCluster} onChange={e=>setTableCluster(e.target.value)} className="filter-input"><option value="All">All Clusters</option>{uniqueClusters.map(c=><option key={c} value={c}>{c}</option>)}</select>
-          <select value={tableDetailFilter} onChange={e=>setTableDetailFilter(e.target.value)} className="filter-input" style={{fontWeight:'bold'}}><option value="All">All Tickets</option><option value="Active">Active Tickets</option><option value="Out SLA">Out SLA</option></select>
-        </div>
+        {!isKioskMode && (
+          <div className="filter-bar">
+            <input type="text" placeholder="Cari ID/Nama/TT (koma)..." value={searchCustomer} onChange={e=>setSearchCustomer(e.target.value)} className="filter-input" />
+            <select value={tableSla} onChange={e=>setTableSla(e.target.value)} className="filter-input"><option value="All">All SLA</option><option value="In SLA">In SLA</option><option value="Out SLA">Out SLA</option></select>
+            <select value={tableCategory} onChange={e=>setTableCategory(e.target.value)} className="filter-input"><option value="All">All Category</option><option value="Retail">Retail</option><option value="Enterprise">Enterprise</option></select>
+            <div className="filter-select-container">
+              <Select 
+                isMulti options={siteOptions} value={tableSite} onChange={setTableSite} placeholder="Sites..." 
+                styles={{ 
+                  control: (b) => ({...b, minHeight:'34px', height:'34px', borderRadius:'6px', borderColor: isDarkMode ? '#334155' : '#e2e8f0', backgroundColor: isDarkMode ? '#0f172a' : '#fff'}),
+                  menu: (b) => ({...b, backgroundColor: isDarkMode ? '#1e293b' : '#fff', zIndex: 10}),
+                  option: (b, { isFocused }) => ({...b, backgroundColor: isFocused ? (isDarkMode ? '#334155' : '#f1f5f9') : 'transparent', color: isDarkMode ? '#f8fafc' : '#1f2937'}),
+                  multiValue: (b) => ({...b, backgroundColor: isDarkMode ? '#334155' : '#e2e8f0'}),
+                  multiValueLabel: (b) => ({...b, color: isDarkMode ? '#f8fafc' : '#1f2937'})
+                }} 
+                menuPortalTarget={document.body} 
+              />
+            </div>
+            <select value={tableCluster} onChange={e=>setTableCluster(e.target.value)} className="filter-input"><option value="All">All Clusters</option>{uniqueClusters.map(c=><option key={c} value={c}>{c}</option>)}</select>
+            <select value={tableDetailFilter} onChange={e=>setTableDetailFilter(e.target.value)} className="filter-input" style={{fontWeight:'bold'}}><option value="All">All Tickets</option><option value="Active">Active Tickets</option><option value="Out SLA">Out SLA</option></select>
+          </div>
+        )}
         
-        <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '320px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '1000px' }}>
-            <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>
-              <tr>{['TT No', 'Customer', 'Cluster', 'Root Cause', 'Category', 'Deskripsi Awal', 'Progress Update', 'Aksi', 'SLA', 'Status'].map(h => (<th key={h} style={{ padding: '14px 16px', fontWeight: '700', color: '#475569', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>))}</tr>
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                {tableHeaders.map(h => (<th key={h}>{h}</th>))}
+              </tr>
             </thead>
             <tbody>
               {tableDataProcessed.map((r, i) => {
-                const isOp = r["Status TT"]?.toLowerCase().includes("open");
-                const isOutSla = r["SLA Real"]?.toLowerCase().includes("out");
+                const isOp = r["Status TT"]?.toLowerCase().includes("open"); const isOutSla = r["SLA Real"]?.toLowerCase().includes("out");
                 return (
-                  <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '12px 16px', color: '#0f172a', fontWeight: '600' }}>{r["TT No"]}</td>
-                    <td style={{ padding: '12px 16px', color: '#334155' }}>{r["ID dan Nama Customer"]}</td>
-                    <td style={{ padding: '12px 16px', color: '#334155' }}>{r["Cluster"]}</td>
-                    <td style={{ padding: '12px 16px', color: '#334155' }}>{r["Root Cause"]}</td>
-                    <td style={{ padding: '12px 16px', color: '#334155' }}>{r["Category"]}</td>
-                    <td style={{ padding: '12px 16px', minWidth: '150px', maxWidth: '200px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r["Deskripsi Awal"] || r["Deskripsi"] || "-"}</td>
-                    <td style={{ padding: '12px 16px', minWidth: '150px', maxWidth: '200px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r["Progress Update"] || "-"}</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <button onClick={() => setViewTicket(r)} style={{ padding: '6px 14px', backgroundColor: '#e2e8f0', color: '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}>Lihat</button>
-                    </td>
-                    <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                      <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isOutSla ? '#ef4444' : '#10b981', marginRight: '6px' }}></span>
-                      <span style={{ color: isOutSla ? '#ef4444' : '#10b981', fontWeight: '700' }}>{r["SLA Real"] || '-'}</span>
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ padding: '4px 10px', borderRadius: '20px', fontWeight: '700', fontSize: '0.7rem', textTransform: 'uppercase', whiteSpace: 'nowrap', backgroundColor: isOp ? '#fef3c7' : '#d1fae5', color: isOp ? '#d97706' : '#059669' }}>
-                        {r["Status TT"]}
-                      </span>
-                    </td>
+                  <tr key={i}>
+                    <td style={{ fontWeight: '600', color: 'var(--text-main)' }}>{r["TT No"]}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{r["ID dan Nama Customer"]}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{r["Cluster"]}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{r["Root Cause"]}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{r["Category"]}</td>
+                    <td style={{ minWidth: '150px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{r["Deskripsi Awal"] || r["Deskripsi"] || "-"}</td>
+                    <td style={{ minWidth: '150px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{r["Progress Update"] || "-"}</td>
+                    <td style={{ fontWeight: '600', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>{r["NOC"] || "-"}</td>
+                    
+                    {!isKioskMode && (
+                      <td><button onClick={() => setViewTicket(r)} style={{ padding: '6px 14px', backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', color: 'var(--text-main)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}>Lihat</button></td>
+                    )}
+                    
+                    <td style={{ whiteSpace: 'nowrap' }}><span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isOutSla ? '#ef4444' : '#10b981', marginRight: '6px' }}></span><span style={{ color: isOutSla ? '#ef4444' : '#10b981', fontWeight: '700' }}>{r["SLA Real"] || '-'}</span></td>
+                    <td><span style={{ padding: '4px 10px', borderRadius: '20px', fontWeight: '700', fontSize: '0.7rem', textTransform: 'uppercase', whiteSpace: 'nowrap', backgroundColor: isOp ? 'rgba(217, 119, 6, 0.15)' : 'rgba(16, 185, 129, 0.15)', color: isOp ? '#d97706' : '#10b981' }}>{r["Status TT"]}</span></td>
                   </tr>
                 );
               })}
-              {tableDataProcessed.length === 0 && (<tr><td colSpan="10" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Tidak ada data tiket sesuai filter.</td></tr>)}
+              {tableDataProcessed.length === 0 && (<tr><td colSpan={isKioskMode ? "10" : "11"} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Tidak ada data tiket sesuai filter.</td></tr>)}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* MODAL POP-UP */}
-      {viewTicket && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.75)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px', boxSizing: 'border-box' }}>
-          <div style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '800px', maxHeight: '90vh', borderRadius: '16px', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '20px 25px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: '16px 16px 0 0' }}>
-              <h2 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a' }}>Detail Tiket: <span style={{ color: '#3b82f6' }}>{viewTicket["TT No"]}</span></h2>
-              <button onClick={() => setViewTicket(null)} style={{ background: 'none', border: 'none', fontSize: '1.75rem', color: '#94a3b8', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+      {/* ROW 5: MTTR YTD TRACKING */}
+      <div className="middle-card" style={{ marginBottom: 0 }}>
+        <h3 style={{ margin: '0 0 20px 0', color: 'var(--text-main)', fontSize: '1.1rem' }}>MTTR & SLA Weekly Analysis YTD</h3>
+        
+        <div className="mttr-container">
+          
+          <div className="mttr-chart-box">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={mttrDataAnalysis} margin={{ top: 35, right: 20, bottom: 5, left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e2e8f0'} />
+                <XAxis dataKey="name" tick={{fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12}} tickMargin={10} axisLine={false} tickLine={false} />
+                <YAxis domain={[90, 100]} tick={{fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12}} axisLine={false} tickLine={false} />
+                <RechartsTooltip contentStyle={{backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#475569' : '#e2e8f0', color: isDarkMode ? '#f8fafc' : '#0f172a', borderRadius: '8px'}} />
+                <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '0.85rem' }} />
+                
+                <Line type="monotone" dataKey="MTTR YTD" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 5, strokeWidth: 2, fill: isDarkMode ? '#1e293b' : '#fff' }} activeDot={{ r: 8 }}>
+                  <LabelList dataKey="MTTR YTD" position="top" offset={12} formatter={(val) => `${val.toFixed(1)}%`} fill={isDarkMode ? '#f8fafc' : '#334155'} fontSize={11} fontWeight="bold" />
+                </Line>
+                
+                <Line type="monotone" dataKey="Target" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="mttr-table-scroll">
+            <table className="matrix-table">
+              <thead>
+                <tr>
+                  <th className="sticky-col">Metrics</th>
+                  {mttrDataAnalysis.map(d => <th key={d.name}>{d.name}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="sticky-col" style={{ color: 'var(--text-muted)' }}>VIP [Achieve in SLA]</td>
+                  {mttrDataAnalysis.map(d => <td key={d.name} style={{ color: d["VIP SLA"] >= 99.5 ? '#10b981' : '#ef4444' }}>{d["VIP SLA"].toFixed(1)}%</td>)}
+                </tr>
+                <tr>
+                  <td className="sticky-col" style={{ color: 'var(--text-muted)' }}>Non VIP [Achieve in SLA]</td>
+                  {mttrDataAnalysis.map(d => <td key={d.name} style={{ color: d["Non-VIP SLA"] >= 99.0 ? '#10b981' : '#ef4444' }}>{d["Non-VIP SLA"].toFixed(1)}%</td>)}
+                </tr>
+                <tr style={{ backgroundColor: 'var(--table-hover)' }}>
+                  <td className="sticky-col" style={{ color: 'var(--text-main)' }}>MTTR Average</td>
+                  {mttrDataAnalysis.map(d => <td key={d.name} style={{ color: '#3b82f6' }}>{d["MTTR"].toFixed(1)}%</td>)}
+                </tr>
+                <tr style={{ backgroundColor: 'var(--table-hover)' }}>
+                  <td className="sticky-col" style={{ color: 'var(--text-main)' }}>MTTR YTD</td>
+                  {mttrDataAnalysis.map(d => <td key={d.name} style={{ color: '#8b5cf6' }}>{d["MTTR YTD"].toFixed(1)}%</td>)}
+                </tr>
+                <tr>
+                  <td className="sticky-col" style={{ color: 'var(--text-muted)' }}>Target (Threshold)</td>
+                  {mttrDataAnalysis.map(d => <td key={d.name} style={{ color: '#f59e0b' }}>99%</td>)}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+      {/* MODAL POP-UP DETAILS */}
+      {viewTicket && !isKioskMode && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.85)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px', boxSizing: 'border-box', backdropFilter: 'blur(4px)' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', width: '100%', maxWidth: '1200px', height: '85vh', maxHeight: '90vh', borderRadius: '16px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+            <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-main)', borderRadius: '16px 16px 0 0', flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-main)' }}>Detail Tiket: <span style={{ color: '#3b82f6' }}>{viewTicket["TT No"]}</span></h2>
+              <button onClick={() => setViewTicket(null)} style={{ background: 'none', border: 'none', fontSize: '2rem', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1, transition: '0.2s' }}>&times;</button>
             </div>
             
-            <div style={{ padding: '25px', overflowY: 'auto', flex: 1 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            {/* HILANGKAN className="table-container" AGAR TIDAK TERPOTONG MAX-HEIGHT 400px */}
+            <div style={{ padding: '32px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-card)', borderRadius: '0 0 16px 16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
                 {Object.entries(viewTicket).map(([key, value]) => {
                   if (!key || key.trim() === '') return null; 
                   return (
-                    <div key={key} style={{ backgroundColor: '#f1f5f9', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>{key}</span>
-                      <span style={{ fontSize: '0.95rem', color: '#1e293b', wordBreak: 'break-word', fontWeight: '500' }}>{value || '-'}</span>
+                    <div key={key} style={{ backgroundColor: 'var(--bg-main)', padding: '16px 20px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                      <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>{key}</span>
+                      <span style={{ fontSize: '1rem', color: 'var(--text-main)', wordBreak: 'break-word', fontWeight: '500', lineHeight: '1.5' }}>{value || '-'}</span>
                     </div>
                   );
                 })}
