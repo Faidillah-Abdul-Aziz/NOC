@@ -14,10 +14,10 @@ const parseDateToYYYYMMDD = (dateString) => {
   return "";
 };
 
-const UpdateTicket = () => {
+// PASTIKAN BARIS INI MENERIMA PROPS DARI App.js
+const UpdateTicket = ({ isDarkMode, toggleDarkMode }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isDarkMode, setIsDarkMode] = useState(false); 
   
   // Filter States
   const [tableStartDate, setTableStartDate] = useState(''); 
@@ -52,6 +52,7 @@ const UpdateTicket = () => {
 
   useEffect(() => { fetchTickets(); }, []);
 
+  // Ubah Background Utama
   useEffect(() => {
     const mainContent = document.querySelector('.main-content');
     if (mainContent) {
@@ -104,7 +105,6 @@ const UpdateTicket = () => {
       progressUpdate: ticket["Progress Update"] || '', 
       restorationAction: ticket["Restoration Action"] || '' 
     });
-    // Scroll ke bagian form update perlahan
     setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 100);
   };
 
@@ -112,7 +112,6 @@ const UpdateTicket = () => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value })); 
   };
 
-  // Helper DatePicker
   const formatDateForState = (dateObj) => {
     if (!dateObj) return "";
     const pad = (n) => n < 10 ? '0' + n : n;
@@ -149,8 +148,8 @@ const UpdateTicket = () => {
     if ((row["Start Stop Clock"] || "-") === "-" && (row["Finish Stop Clock"] || "-") === "-") return "-";
     return (
       <div style={{ fontSize: '0.8rem', lineHeight: '1.4' }}>
-        <span style={{ color: '#059669', fontWeight: 'bold' }}>Start:</span> {row["Start Stop Clock"]}<br/>
-        <span style={{ color: '#dc2626', fontWeight: 'bold' }}>Finish:</span> {row["Finish Stop Clock"]}
+        <span style={{ color: '#10b981', fontWeight: 'bold' }}>Start:</span> {row["Start Stop Clock"]}<br/>
+        <span style={{ color: '#ef4444', fontWeight: 'bold' }}>Finish:</span> {row["Finish Stop Clock"]}
       </div>
     );
   };
@@ -192,7 +191,7 @@ const UpdateTicket = () => {
         .btn-primary { height: 38px; padding: 0 16px; background: var(--accent); color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; transition: 0.2s; font-size: 0.9rem; }
         .btn-primary:hover { background: var(--accent-hover); }
         .btn-secondary { height: 38px; padding: 0 16px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; transition: 0.2s; font-size: 0.9rem; }
-        .btn-secondary:hover { background: var(--border); }
+        .btn-secondary:hover { background: var(--table-hover); }
         .btn-action-view { padding: 6px 14px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.75rem; transition: 0.2s; }
         .btn-action-view:hover { background: var(--table-hover); }
         .btn-action-update { padding: 6px 14px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.75rem; transition: 0.2s; }
@@ -252,7 +251,7 @@ const UpdateTicket = () => {
         </div>
         <div className="dash-header-controls">
           <button className="btn-secondary" onClick={fetchTickets} disabled={loading}>🔄 Refresh</button>
-          <button className="btn-secondary" onClick={() => setIsDarkMode(!isDarkMode)}>
+          <button className="btn-secondary" onClick={toggleDarkMode}>
             {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
           </button>
         </div>
@@ -263,7 +262,7 @@ const UpdateTicket = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.2rem' }}>Daftar Tiket</h3>
-            <span style={{ fontSize: '0.8rem', background: 'var(--table-hover)', padding: '6px 12px', borderRadius: '20px', color: 'var(--text-muted)', fontWeight: 'bold' }}>{filteredData.length} entries</span>
+            <span style={{ fontSize: '0.8rem', background: 'var(--table-hover)', padding: '6px 12px', borderRadius: '20px', color: 'var(--text-muted)', fontWeight: 'bold' }}>Showing {filteredData.length} entries</span>
           </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -272,7 +271,7 @@ const UpdateTicket = () => {
               <input type="date" value={tableStartDate} onChange={e=>setTableStartDate(e.target.value)} style={{ padding: '0 8px', height: '28px', border: 'none', borderRadius: '4px', fontSize: '0.8rem', background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none' }} />
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>-</span>
               <input type="date" value={tableEndDate} onChange={e=>setTableEndDate(e.target.value)} style={{ padding: '0 8px', height: '28px', border: 'none', borderRadius: '4px', fontSize: '0.8rem', background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none' }} />
-              {(tableStartDate || tableEndDate) && <button onClick={() => { setTableStartDate(''); setTableEndDate(''); }} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 'bold', cursor: 'pointer', padding: '0 8px', fontSize: '1rem' }}>✕</button>}
+              {(tableStartDate || tableEndDate) && <button onClick={() => { setTableStartDate(''); setTableEndDate(''); }} style={{ background: 'none', border: 'none', color: 'var(--danger)', fontWeight: 'bold', cursor: 'pointer', padding: '0 8px', fontSize: '1rem' }}>✕</button>}
             </div>
           </div>
         </div>
@@ -335,7 +334,7 @@ const UpdateTicket = () => {
         <div className="update-form-container">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
             <h3 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--text-main)' }}>Update: <span style={{ color: 'var(--accent)' }}>{selectedTicket["TT No"]}</span></h3>
-            <button onClick={() => setSelectedTicket(null)} style={{ background: 'none', border: 'none', color: 'var(--danger)', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem', padding: '8px 16px', borderRadius: '6px', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor='rgba(239, 68, 68, 0.1)'} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'}>✕ Batal Update</button>
+            <button onClick={() => setSelectedTicket(null)} style={{ background: 'none', border: 'none', color: 'var(--danger)', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem', padding: '8px 16px', borderRadius: '6px', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor=isDarkMode?'rgba(239, 68, 68, 0.2)':'rgba(239, 68, 68, 0.1)'} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'}>✕ Batal Update</button>
           </div>
           
           <form onSubmit={handleSubmitUpdate}>

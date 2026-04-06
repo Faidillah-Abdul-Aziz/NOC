@@ -3,9 +3,9 @@ import { API_URL } from '../config';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
-const TicketEntry = () => {
+// PASTIKAN BARIS INI MENERIMA PROPS isDarkMode & toggleDarkMode DARI App.js
+const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
   const [loading, setLoading] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false); 
   
   const [deskripsiOptions, setDeskripsiOptions] = useState([]);
   const [progressOptions, setProgressOptions] = useState([]);
@@ -19,7 +19,7 @@ const TicketEntry = () => {
     "Restoration Action": "", "Root_Cause_Cat": "", "Root_Cause_Sub": "", "Root_Cause_Manual": "", 
     "Visit or No Visit": "", "Product": "Internet", "PIC_Select": "Ideanet", "PIC_Lainnya": "", 
     "Source": "Manual", "Status TT": "Open", "Network IDI": "Yes", "NOC": "", "Site": "", 
-    "Category": "Retail", // Default diset ke Retail
+    "Category": "Retail", // Default
   });
 
   const getSortedByFrequency = (dataArray, key1, key2) => {
@@ -51,6 +51,7 @@ const TicketEntry = () => {
     fetchSuggestions();
   }, []);
 
+  // Ubah Background Utama menyesuaikan Dark Mode Global
   useEffect(() => {
     const mainContent = document.querySelector('.main-content');
     if (mainContent) {
@@ -70,12 +71,7 @@ const TicketEntry = () => {
   const formatDateForState = (dateObj) => {
     if (!dateObj) return "";
     const pad = (n) => n < 10 ? '0' + n : n;
-    const yyyy = dateObj.getFullYear();
-    const MM = pad(dateObj.getMonth() + 1);
-    const dd = pad(dateObj.getDate());
-    const HH = pad(dateObj.getHours());
-    const mm = pad(dateObj.getMinutes());
-    return `${yyyy}-${MM}-${dd}T${HH}:${mm}`;
+    return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
   };
 
   const handleDateChange = (name, date) => {
@@ -109,7 +105,6 @@ const TicketEntry = () => {
     try {
       await fetch(API_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(payload) });
       alert("Tiket berhasil disimpan ke Database NOC!");
-      // Kembalikan Category ke Retail saat di-reset
       setFormData({
         "Impact service": "", "Media Info": "Messenger", "Deskripsi": "", "ID dan Nama Customer": "", "ISP_Select": "IdeaNet", "ISP_Lainnya": "", "Cluster": "", "Type Cluster": "Non VIP", "Progress Update": "", "Start Time": "", "Response Time": "", "Resolved Time": "", "Start Stop Clock": "", "Finish Stop Clock": "", "Restoration Action": "", "Root_Cause_Cat": "", "Root_Cause_Sub": "", "Root_Cause_Manual": "", "Visit or No Visit": "", "Product": "Internet", "PIC_Select": "Ideanet", "PIC_Lainnya": "", "Source": "Manual", "Status TT": "Open", "Network IDI": "Yes", "NOC": "", "Site": "", 
         "Category": "Retail" 
@@ -139,8 +134,8 @@ const TicketEntry = () => {
         .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-left: 45px; }
         .header-title { margin: 0; font-size: 1.5rem; font-weight: 800; color: var(--text-main); }
         
-        .btn-secondary { height: 38px; padding: 0 16px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; transition: 0.2s; }
-        .btn-secondary:hover { background: var(--border); }
+        .btn-secondary { height: 38px; padding: 0 16px; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; transition: 0.2s; }
+        .btn-secondary:hover { background: var(--bg-section); }
 
         .progress-container { width: 100%; height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 24px; }
         .progress-fill { height: 100%; background: var(--success); transition: width 0.4s ease; }
@@ -188,7 +183,7 @@ const TicketEntry = () => {
           transition: 0.2s; box-shadow: 0 4px 6px -1px rgba(59,130,246,0.3); text-transform: uppercase; letter-spacing: 1px;
         }
         .submit-btn:hover:not(:disabled) { background: var(--accent-hover); transform: translateY(-2px); }
-        .submit-btn:disabled { background: var(--text-muted); cursor: not-allowed; transform: none; box-shadow: none; }
+        .submit-btn:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; transform: none; box-shadow: none; }
 
         .preview-card { position: sticky; top: 24px; background: var(--bg-card); padding: 24px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
         .preview-header { font-size: 1.1rem; font-weight: 700; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin: 0 0 16px 0; color: var(--text-main); }
@@ -216,7 +211,7 @@ const TicketEntry = () => {
           <h2 className="header-title">Create New Ticket</h2>
           <p style={{ margin: '4px 0 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Input operasional NOC harian.</p>
         </div>
-        <button className="btn-secondary" onClick={() => setIsDarkMode(!isDarkMode)}>
+        <button className="btn-secondary" onClick={toggleDarkMode}>
           {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
         </button>
       </div>
@@ -315,7 +310,6 @@ const TicketEntry = () => {
                   </select>
                 </div>
                 
-                {/* INI KEMBALI MENGGUNAKAN INPUT AGAR BISA AUTOCOMPLETE DATALIST */}
                 <div className="input-group noc-full">
                   <label className="noc-label required">Deskripsi / Kronologi Awal</label>
                   <input type="text" className="noc-input" name="Deskripsi" list="deskripsi-list" value={formData["Deskripsi"]} onChange={handleChange} placeholder="Ketik / pilih dari database..." autoComplete="off" required />
@@ -324,7 +318,7 @@ const TicketEntry = () => {
               </div>
             </div>
 
-            {/* SECTION 3: Waktu (REACT-DATEPICKER 1 MENIT) */}
+            {/* SECTION 3: Waktu */}
             <div className="form-section">
               <div className="section-header"><div className="section-number">3</div><h3 className="section-title">Manajemen Waktu</h3></div>
               <div className="grid-2">
@@ -520,8 +514,8 @@ const TicketEntry = () => {
           </div>
 
           <div style={{ backgroundColor: 'var(--bg-section)', padding: '12px', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-            <div><strong style={{display:'block'}}>Start Time</strong> {formData["Start Time"] ? formData["Start Time"].replace('T', ' ') : '-'}</div>
-            <div style={{textAlign:'right'}}><strong style={{display:'block'}}>Resolved Time</strong> {formData["Resolved Time"] ? formData["Resolved Time"].replace('T', ' ') : '-'}</div>
+            <div><strong style={{display:'block', color: 'var(--text-main)'}}>Start Time</strong> {formData["Start Time"] ? formData["Start Time"].replace('T', ' ') : '-'}</div>
+            <div style={{textAlign:'right'}}><strong style={{display:'block', color: 'var(--text-main)'}}>Resolved Time</strong> {formData["Resolved Time"] ? formData["Resolved Time"].replace('T', ' ') : '-'}</div>
           </div>
 
         </div>

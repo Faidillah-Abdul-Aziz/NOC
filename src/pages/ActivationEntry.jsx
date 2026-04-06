@@ -3,9 +3,8 @@ import { API_URL } from '../config';
 import Select from 'react-select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, LabelList } from 'recharts';
 
-const ActivationEntry = () => {
+const ActivationEntry = ({ isDarkMode, toggleDarkMode }) => {
   const [loading, setLoading] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [siteOptions, setSiteOptions] = useState([]);
   const [activationList, setActivationList] = useState([]);
   
@@ -41,12 +40,10 @@ const ActivationEntry = () => {
 
   useEffect(() => { fetchActivationData(); }, []);
 
-  // Effect untuk mengubah warna background utama (container luar) saat Dark Mode
   useEffect(() => {
     const mainContent = document.querySelector('.main-content');
     if (mainContent) {
       mainContent.style.backgroundColor = isDarkMode ? '#0f172a' : '#f1f5f9';
-      mainContent.style.transition = 'background-color 0.3s ease';
     }
     return () => { if (mainContent) mainContent.style.backgroundColor = '#f1f5f9'; };
   }, [isDarkMode]);
@@ -195,7 +192,7 @@ const ActivationEntry = () => {
         </div>
         <div className="dash-header-controls">
           <button className="btn-secondary" onClick={fetchActivationData} disabled={loading}>🔄 Refresh</button>
-          <button className="btn-secondary" onClick={() => setIsDarkMode(!isDarkMode)}>
+          <button className="btn-secondary" onClick={toggleDarkMode}>
             {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
           </button>
         </div>
@@ -263,7 +260,15 @@ const ActivationEntry = () => {
                 <label className="update-label">Bandwidth</label>
                 <div className="act-flex-row">
                   <select className="update-input act-flex-1" name="BW_Select" value={formData["BW_Select"]} onChange={handleChange} required>
-                    <option value="10Mbps">10 Mbps</option><option value="20Mbps">20 Mbps</option><option value="50Mbps">50 Mbps</option><option value="100Mbps">100 Mbps</option><option value="Lainnya">Lainnya...</option>
+                    <option value="10Mbps">10 Mbps</option>
+                    <option value="20Mbps">20 Mbps</option>
+                    <option value="30Mbps">30 Mbps</option>
+                    <option value="50Mbps">50 Mbps</option>
+                    <option value="75Mbps">75 Mbps</option>
+                    <option value="100Mbps">100 Mbps</option>
+                    <option value="150Mbps">150 Mbps</option>
+                    <option value="200Mbps">200 Mbps</option>
+                    <option value="Lainnya">Lainnya...</option>
                   </select>
                   {formData["BW_Select"] === "Lainnya" && (
                     <input type="text" className="update-input act-flex-1" name="BW_Lainnya" value={formData["BW_Lainnya"]} onChange={handleChange} placeholder="Misal: 500Mbps" required />
@@ -273,7 +278,11 @@ const ActivationEntry = () => {
               <div className="update-input-group">
                 <label className="update-label">PIC In Charge (NOC)</label>
                 <select className="update-input" name="PIC" value={formData["PIC"]} onChange={handleChange} required>
-                  <option value="">-- Pilih NOC --</option><option value="Faidillah">Faidillah</option><option value="Yudi">Yudi</option><option value="Adit">Adit</option>
+                  <option value="">-- Pilih NOC --</option>
+                  <option value="Faidillah">Faidillah</option>
+                  <option value="Yudi">Yudi</option>
+                  <option value="Adit">Adit</option>
+                  <option value="Miko">Miko</option>
                 </select>
               </div>
             </div>

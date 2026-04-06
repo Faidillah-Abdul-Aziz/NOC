@@ -26,13 +26,16 @@ const parseDateToYYYYMMDD = (dateString) => {
 };
 
 const checkIsVIP = (item) => {
+  // Mendukung pengecekan format data lama ("VIP") maupun format baru ("VIP SLA (1 Jam)")
+  const typeCluster = item["Type Cluster"] || "";
+  if (typeCluster.toUpperCase().includes("VIP") && !typeCluster.toUpperCase().includes("NON")) return true;
   return Object.values(item).some(val => typeof val === 'string' && val.trim().toUpperCase() === 'VIP');
 };
 
-const Dashboard = () => {
+// Menerima props isDarkMode dan toggleDarkMode dari App.js
+const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isDarkMode, setIsDarkMode] = useState(false); 
   const [isKioskMode, setIsKioskMode] = useState(false); 
   
   const [filterType, setFilterType] = useState('Week'); 
@@ -122,6 +125,7 @@ const Dashboard = () => {
   const inSLA = filteredData.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
   const outSLA = filteredData.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
 
+  // PERHITUNGAN SLA RETAIL & ENTERPRISE
   const retailData = filteredData.filter(i => i["Category"] === "Retail");
   const enterpriseData = filteredData.filter(i => i["Category"] === "Enterprise");
   const retailInSLA = retailData.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
@@ -130,6 +134,24 @@ const Dashboard = () => {
   const enterpriseOutSLA = enterpriseData.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
   const retailPerc = retailData.length > 0 ? ((retailInSLA / retailData.length) * 100).toFixed(1) : 0;
   const entPerc = enterpriseData.length > 0 ? ((enterpriseInSLA / enterpriseData.length) * 100).toFixed(1) : 0;
+
+  // PERHITUNGAN SLA VIP & NON VIP BARU
+  const vipDataList = filteredData.filter(i => {
+    const tc = (i["Type Cluster"] || "").toUpperCase();
+    return tc.includes("VIP") && !tc.includes("NON");
+  });
+  const nonVipDataList = filteredData.filter(i => {
+    const tc = (i["Type Cluster"] || "").toUpperCase();
+    return tc.includes("NON VIP");
+  });
+  
+  const vipInSLA = vipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
+  const vipOutSLA = vipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
+  const nonVipInSLA = nonVipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
+  const nonVipOutSLA = nonVipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
+
+  const vipPerc = vipDataList.length > 0 ? ((vipInSLA / vipDataList.length) * 100).toFixed(1) : 0;
+  const nonVipPerc = nonVipDataList.length > 0 ? ((nonVipInSLA / nonVipDataList.length) * 100).toFixed(1) : 0;
 
   const pieData = totalTT > 0 ? [{ name: 'Closed TT', value: completedTT }, { name: 'Open TT', value: activeTT }] : [{ name: 'No Data', value: 1 }];
   const PIE_COLORS = totalTT > 0 ? ['#10b981', '#f59e0b'] : [isDarkMode ? '#334155' : '#e5e7eb']; 
@@ -325,13 +347,14 @@ const Dashboard = () => {
 
       {/* HEADER & GLOBAL FILTER */}
       <div className="dash-header">
-        <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: 0, color: 'var(--text-main)' }}>Enterprise NOC Dashboard</h2>
+        {/* JUDUL DIUBAH MENJADI DASHBOARD NOC */}
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: 0, color: 'var(--text-main)' }}>Dashboard NOC</h2>
         
         {!isKioskMode && (
           <div className="dash-header-controls">
             <button className="btn-secondary" onClick={fetchData} disabled={loading}>Refresh</button>
-            <button className="btn-secondary" onClick={() => setIsDarkMode(!isDarkMode)}>
-              {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+            <button className="btn-secondary" onClick={toggleDarkMode}>
+              {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
             </button>
             <button className="btn-primary" onClick={toggleKioskMode} style={{ background: '#8b5cf6' }}>
               TV Mode
@@ -397,21 +420,44 @@ const Dashboard = () => {
         </div>
 
         <div className="middle-card" style={{ justifyContent: 'center', marginBottom: 0 }}>
-          <h4 style={{ margin: '0 0 24px', color: 'var(--text-main)' }}>SLA Performance by Category</h4>
-          <div style={{ marginBottom: '32px' }}>
+          <h4 style={{ margin: '0 0 20px', color: 'var(--text-main)' }}>SLA Performance by Category</h4>
+          
+          {/* RETAIL */}
+          <div style={{ marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>Retail <span style={{color:'#10b981'}}>{retailPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {retailData.length}</span></div>
             <div style={{ display: 'flex', height: '30px', borderRadius: '8px', overflow: 'hidden', background: isDarkMode ? '#334155' : '#e2e8f0' }}>
               <div style={{ width: `${(retailInSLA/retailData.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{retailInSLA||''}</div>
               <div style={{ width: `${(retailOutSLA/retailData.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{retailOutSLA||''}</div>
             </div>
           </div>
-          <div>
+          
+          {/* ENTERPRISE */}
+          <div style={{ marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>Enterprise <span style={{color:'#10b981'}}>{entPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {enterpriseData.length}</span></div>
             <div style={{ display: 'flex', height: '30px', borderRadius: '8px', overflow: 'hidden', background: isDarkMode ? '#334155' : '#e2e8f0' }}>
               <div style={{ width: `${(enterpriseInSLA/enterpriseData.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{enterpriseInSLA||''}</div>
               <div style={{ width: `${(enterpriseOutSLA/enterpriseData.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{enterpriseOutSLA||''}</div>
             </div>
           </div>
+
+          {/* VIP (BARU) */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>VIP <span style={{color:'#10b981'}}>{vipPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {vipDataList.length}</span></div>
+            <div style={{ display: 'flex', height: '30px', borderRadius: '8px', overflow: 'hidden', background: isDarkMode ? '#334155' : '#e2e8f0' }}>
+              <div style={{ width: `${(vipInSLA/vipDataList.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{vipInSLA||''}</div>
+              <div style={{ width: `${(vipOutSLA/vipDataList.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{vipOutSLA||''}</div>
+            </div>
+          </div>
+
+          {/* NON VIP (BARU) */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>Non VIP <span style={{color:'#10b981'}}>{nonVipPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {nonVipDataList.length}</span></div>
+            <div style={{ display: 'flex', height: '30px', borderRadius: '8px', overflow: 'hidden', background: isDarkMode ? '#334155' : '#e2e8f0' }}>
+              <div style={{ width: `${(nonVipInSLA/nonVipDataList.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{nonVipInSLA||''}</div>
+              <div style={{ width: `${(nonVipOutSLA/nonVipDataList.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{nonVipOutSLA||''}</div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -594,7 +640,6 @@ const Dashboard = () => {
               <button onClick={() => setViewTicket(null)} style={{ background: 'none', border: 'none', fontSize: '2rem', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1, transition: '0.2s' }}>&times;</button>
             </div>
             
-            {/* HILANGKAN className="table-container" AGAR TIDAK TERPOTONG MAX-HEIGHT 400px */}
             <div style={{ padding: '32px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-card)', borderRadius: '0 0 16px 16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
                 {Object.entries(viewTicket).map(([key, value]) => {

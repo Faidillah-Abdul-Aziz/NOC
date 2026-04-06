@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import TicketEntry from './pages/TicketEntry'; 
 import Dashboard from './pages/Dashboard'; 
@@ -7,7 +7,31 @@ import ActivationEntry from './pages/ActivationEntry';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  
+  // 1. STATE DARK MODE (Membaca dari memori browser agar tidak hilang saat di-refresh)
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem('theme') === 'dark';
+  });
+
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+  
+  // 2. FUNGSI TOGGLE TEMA (Menyimpan pilihan ke memori browser)
+  const toggleDarkMode = () => {
+    setIsDarkMode(prevMode => {
+      const newMode = !prevMode;
+      localStorage.setItem('theme', newMode ? 'dark' : 'light');
+      return newMode;
+    });
+  };
+
+  // 3. MENGATUR BACKGROUND UTAMA DARI SINI
+  useEffect(() => {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      mainContent.style.backgroundColor = isDarkMode ? '#0f172a' : '#f1f5f9';
+      mainContent.style.transition = 'background-color 0.3s ease';
+    }
+  }, [isDarkMode]);
 
   return (
     <Router>
@@ -37,10 +61,10 @@ function App() {
           overflow-y: auto;
           transition: background-color 0.3s ease;
           background-color: #f1f5f9;
-          position: relative; /* PENTING: Agar tombol menu bisa melayang relatif terhadap area ini */
+          position: relative; 
         }
         .toggle-menu-btn {
-          position: absolute; /* PENTING: Membuat tombol melayang agar tidak mendorong dashboard ke bawah */
+          position: absolute; 
           top: 16px;
           left: 20px;
           z-index: 50;
@@ -88,8 +112,8 @@ function App() {
             <div className="nav-menu">
               <Link to="/" className="nav-item">Entry Ticket</Link>
               <Link to="/analytics" className="nav-item">Dashboard</Link>
-              <Link to="/update" className="nav-item">Update</Link>
-              <Link to="/activation" className="nav-item">Activation</Link>
+              <Link to="/update" className="nav-item">Update Ticket</Link>
+              <Link to="/activation" className="nav-item">Input Activation</Link>
             </div>
           </div>
         </div>
@@ -101,10 +125,11 @@ function App() {
           </button>
 
           <Routes>
-            <Route path="/" element={<TicketEntry />} />
-            <Route path="/analytics" element={<Dashboard />} /> 
-            <Route path="/update" element={<UpdateTicket />} />
-            <Route path="/activation" element={<ActivationEntry />} />
+            {/* 4. MENGIRIMKAN STATE & FUNGSI TEMA KE SEMUA HALAMAN */}
+            <Route path="/" element={<TicketEntry isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
+            <Route path="/analytics" element={<Dashboard isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} /> 
+            <Route path="/update" element={<UpdateTicket isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
+            <Route path="/activation" element={<ActivationEntry isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
           </Routes>
         </div>
 
@@ -113,4 +138,4 @@ function App() {
   );
 }
 
-export default App;
+export default App; 
