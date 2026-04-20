@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { API_URL } from '../config';
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import Select from 'react-select'; 
+import html2canvas from 'html2canvas'; // IMPORT BARU
 
 const getCurrentWeekStr = () => {
   const today = new Date();
@@ -10,9 +11,7 @@ const getCurrentWeekStr = () => {
   const dayOfJan1 = jan1.getUTCDay();
   const daysToFirstWed = (3 - dayOfJan1 + 7) % 7;
   const firstWed = new Date(Date.UTC(today.getFullYear(), 0, 1 + daysToFirstWed));
-  
-  let weekNo = current < firstWed ? 1 : Math.floor(Math.round((current - firstWed) / 86400000) / 7) + 2;
-  return `W${weekNo}`; 
+  return `W${current < firstWed ? 1 : Math.floor(Math.round((current - firstWed) / 86400000) / 7) + 2}`; 
 };
 
 const parseDateToYYYYMMDD = (dateString) => {
@@ -26,13 +25,11 @@ const parseDateToYYYYMMDD = (dateString) => {
 };
 
 const checkIsVIP = (item) => {
-  // Mendukung pengecekan format data lama ("VIP") maupun format baru ("VIP SLA (1 Jam)")
   const typeCluster = item["Type Cluster"] || "";
   if (typeCluster.toUpperCase().includes("VIP") && !typeCluster.toUpperCase().includes("NON")) return true;
   return Object.values(item).some(val => typeof val === 'string' && val.trim().toUpperCase() === 'VIP');
 };
 
-// Menerima props isDarkMode dan toggleDarkMode dari App.js
 const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,11 +47,18 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
   const [searchCustomer, setSearchCustomer] = useState(''); 
   const [tableSla, setTableSla] = useState('All');
   const [tableCategory, setTableCategory] = useState('All'); 
+  const [tableVipFilter, setTableVipFilter] = useState('All'); 
   const [tableSite, setTableSite] = useState([]); 
   const [tableCluster, setTableCluster] = useState('All');
   const [tableDetailFilter, setTableDetailFilter] = useState('All');
   
   const [viewTicket, setViewTicket] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFormData, setEditFormData] = useState({});
+  const [listModalData, setListModalData] = useState(null);
+
+  // REF BARU UNTUK AREA MTTR YANG AKAN DI-SCREENSHOT
+  const mttrSectionRef = useRef(null);
 
   const fetchData = async () => {
     try {
@@ -71,9 +75,7 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
 
   useEffect(() => {
     let interval;
-    if (isKioskMode) {
-      interval = setInterval(() => { fetchData(); }, 300000); 
-    }
+    if (isKioskMode) interval = setInterval(() => { fetchData(); }, 300000); 
     return () => clearInterval(interval);
   }, [isKioskMode]);
 
@@ -93,141 +95,181 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
 
   const toggleKioskMode = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => {
-        alert(`Error enabling fullscreen mode: ${err.message}`);
-      });
+      document.documentElement.requestFullscreen().catch(err => alert(`Error: ${err.message}`));
     } else {
-      if (document.exitFullscreen) { document.exitFullscreen(); }
+      if (document.exitFullscreen) document.exitFullscreen(); 
     }
   };
 
-  const uniqueMonths = [...new Set(data.map(item => item["Month"]).filter(Boolean))];
-  let uniqueWeeks = [...new Set(data.map(item => item["Week"]).filter(val => val && val.startsWith('W')))];
-  if (!uniqueWeeks.includes(getCurrentWeekStr())) uniqueWeeks.push(getCurrentWeekStr());
-  uniqueWeeks.sort((a,b)=>parseInt(a.replace(/\D/g,''))-parseInt(b.replace(/\D/g,'')));
-
-  const filteredData = data.filter(item => {
-    if (filterType === 'Month') return item["Month"] === filterValue;
-    if (filterType === 'Week') return item["Week"] === filterValue;
-    if (filterType === 'Date Range') {
-      const formattedItemDate = parseDateToYYYYMMDD(item["Start Time"] || item["Timestamp"]);
-      if (!formattedItemDate) return false;
-      if (startDate && formattedItemDate < startDate) return false;
-      if (endDate && formattedItemDate > endDate) return false;
-    }
-    return true;
-  });
-
-  const totalTT = filteredData.length;
-  const activeTT = filteredData.filter(i => i["Status TT"]?.toLowerCase().includes("open")).length;
-  const completedTT = totalTT - activeTT;
-  const overdueMTTR = filteredData.filter(i => i["Status TT"]?.toLowerCase().includes("open") && i["SLA Real"]?.toLowerCase().includes("out")).length;
-  const inSLA = filteredData.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
-  const outSLA = filteredData.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
-
-  // PERHITUNGAN SLA RETAIL & ENTERPRISE
-  const retailData = filteredData.filter(i => i["Category"] === "Retail");
-  const enterpriseData = filteredData.filter(i => i["Category"] === "Enterprise");
-  const retailInSLA = retailData.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
-  const retailOutSLA = retailData.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
-  const enterpriseInSLA = enterpriseData.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
-  const enterpriseOutSLA = enterpriseData.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
-  const retailPerc = retailData.length > 0 ? ((retailInSLA / retailData.length) * 100).toFixed(1) : 0;
-  const entPerc = enterpriseData.length > 0 ? ((enterpriseInSLA / enterpriseData.length) * 100).toFixed(1) : 0;
-
-  // PERHITUNGAN SLA VIP & NON VIP BARU
-  const vipDataList = filteredData.filter(i => {
-    const tc = (i["Type Cluster"] || "").toUpperCase();
-    return tc.includes("VIP") && !tc.includes("NON");
-  });
-  const nonVipDataList = filteredData.filter(i => {
-    const tc = (i["Type Cluster"] || "").toUpperCase();
-    return tc.includes("NON VIP");
-  });
+  const uniqueMonths = useMemo(() => [...new Set(data.map(item => item["Month"]).filter(Boolean))], [data]);
   
-  const vipInSLA = vipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
-  const vipOutSLA = vipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
-  const nonVipInSLA = nonVipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
-  const nonVipOutSLA = nonVipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
+  const uniqueWeeks = useMemo(() => {
+    let weeks = [...new Set(data.map(item => item["Week"]).filter(val => val && val.startsWith('W')))];
+    if (!weeks.includes(getCurrentWeekStr())) weeks.push(getCurrentWeekStr());
+    return weeks.sort((a,b)=>parseInt(a.replace(/\D/g,''))-parseInt(b.replace(/\D/g,'')));
+  }, [data]);
 
-  const vipPerc = vipDataList.length > 0 ? ((vipInSLA / vipDataList.length) * 100).toFixed(1) : 0;
-  const nonVipPerc = nonVipDataList.length > 0 ? ((nonVipInSLA / nonVipDataList.length) * 100).toFixed(1) : 0;
-
-  const pieData = totalTT > 0 ? [{ name: 'Closed TT', value: completedTT }, { name: 'Open TT', value: activeTT }] : [{ name: 'No Data', value: 1 }];
-  const PIE_COLORS = totalTT > 0 ? ['#10b981', '#f59e0b'] : [isDarkMode ? '#334155' : '#e5e7eb']; 
-
-  const renderCustomLabel = ({ cx, cy, midAngle, outerRadius, value, index }) => {
-    if (value === 0 || totalTT === 0) return null; 
-    const RADIAN = Math.PI / 180; const radius = outerRadius + 15; 
-    const x = cx + radius * Math.cos(-midAngle * RADIAN); const y = cy + radius * Math.sin(-midAngle * RADIAN);
-    return (<text x={x} y={y} fill={PIE_COLORS[index % PIE_COLORS.length]} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontWeight="bold" fontSize="16">{value}</text>);
-  };
-
-  const siteOptions = [...new Set(filteredData.map(i => i["Site"]).filter(Boolean))].map(s => ({ value: s, label: s }));
-  const uniqueClusters = [...new Set(filteredData.map(i => i["Cluster"]).filter(Boolean))];
-
-  let baseTableData = (tableStartDate || tableEndDate) ? data : filteredData;
-  let tableDataProcessed = [...baseTableData].filter(i => {
-    if (tableStartDate || tableEndDate) {
-      const formattedItemDate = parseDateToYYYYMMDD(i["Start Time"] || i["Timestamp"]);
-      if (!formattedItemDate) return false;
-      if (tableStartDate && formattedItemDate < tableStartDate) return false;
-      if (tableEndDate && formattedItemDate > tableEndDate) return false;
-    }
-    if (tableDetailFilter === 'Active' && !i["Status TT"]?.toLowerCase().includes("open")) return false;
-    if (tableDetailFilter === 'Out SLA' && !i["SLA Real"]?.toLowerCase().includes("out")) return false;
-    if (tableDetailFilter === 'Overdue MTTR' && !(i["Status TT"]?.toLowerCase().includes("open") && i["SLA Real"]?.toLowerCase().includes("out"))) return false;
-    if (tableSla === 'In SLA' && !i["SLA Real"]?.toLowerCase().includes("in")) return false;
-    if (tableSla === 'Out SLA' && !i["SLA Real"]?.toLowerCase().includes("out")) return false;
-    if (tableCluster !== 'All' && i["Cluster"] !== tableCluster) return false;
-    if (tableCategory !== 'All' && i["Category"] !== tableCategory) return false;
-    
-    const hasSiteFilter = tableSite.length > 0;
-    const searchTerms = searchCustomer.trim().toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
-    const hasSearchFilter = searchTerms.length > 0;
-
-    if (hasSiteFilter || hasSearchFilter) {
-      let matchSite = false; if (hasSiteFilter) matchSite = tableSite.some(opt => opt.value === i["Site"]);
-      let matchSearch = false;
-      if (hasSearchFilter) {
-        const customerInfo = (i["ID dan Nama Customer"] || "").toLowerCase(); const ttNo = (i["TT No"] || "").toLowerCase();
-        matchSearch = searchTerms.some(term => customerInfo.includes(term) || ttNo.includes(term));
+  const filteredData = useMemo(() => {
+    return data.filter(item => {
+      if (filterType === 'Month') return item["Month"] === filterValue;
+      if (filterType === 'Week') return item["Week"] === filterValue;
+      if (filterType === 'Date Range') {
+        const formattedItemDate = parseDateToYYYYMMDD(item["Start Time"] || item["Timestamp"]);
+        if (!formattedItemDate) return false;
+        if (startDate && formattedItemDate < startDate) return false;
+        if (endDate && formattedItemDate > endDate) return false;
       }
-      if (hasSiteFilter && hasSearchFilter) { if (!matchSite && !matchSearch) return false; } 
-      else if (hasSiteFilter && !matchSite) return false;
-      else if (hasSearchFilter && !matchSearch) return false;
-    }
-    return true;
-  });
+      return true;
+    });
+  }, [data, filterType, filterValue, startDate, endDate]);
 
-  let baseRcaData = rcaDataSource === 'Global' ? filteredData : tableDataProcessed;
-  const rootCauseCounts = baseRcaData.reduce((acc, i) => { acc[i["Root Cause"] || "Unspecified"] = (acc[i["Root Cause"] || "Unspecified"] || 0) + 1; return acc; }, {});
-  const barData = Object.keys(rootCauseCounts).map(k => ({ name: k, Total: rootCauseCounts[k] })).sort((a,b)=>b.Total-a.Total);
-
-  let cumulativeMttr = 0;
-  const mttrDataAnalysis = uniqueWeeks.map((wk, idx) => {
-    const wkData = data.filter(d => d.Week === wk);
-    const vipData = wkData.filter(d => checkIsVIP(d));
-    const nonVipData = wkData.filter(d => !checkIsVIP(d));
-
-    const calcSla = (arr) => arr.length === 0 ? 0 : (arr.filter(d => String(d["SLA Real"]).toLowerCase().includes("in")).length / arr.length) * 100;
+  const metrics = useMemo(() => {
+    const totalTT = filteredData.length;
+    const activeTTList = filteredData.filter(i => i["Status TT"]?.toLowerCase().includes("open"));
+    const activeTT = activeTTList.length;
     
-    const vipAchieve = calcSla(vipData);
-    const nonVipAchieve = calcSla(nonVipData);
-    const mttr = (vipData.length === 0 && nonVipData.length === 0) ? 0 : (vipAchieve + nonVipAchieve) / 2;
+    const completedTTList = filteredData.filter(i => !i["Status TT"]?.toLowerCase().includes("open"));
+    const completedTT = completedTTList.length;
+    
+    const overdueMTTRList = filteredData.filter(i => i["Status TT"]?.toLowerCase().includes("open") && i["SLA Real"]?.toLowerCase().includes("out"));
+    const overdueMTTR = overdueMTTRList.length;
+    
+    const inSLAList = filteredData.filter(i => i["SLA Real"]?.toLowerCase().includes("in"));
+    const inSLA = inSLAList.length;
+    
+    const outSLAList = filteredData.filter(i => i["SLA Real"]?.toLowerCase().includes("out"));
+    const outSLA = outSLAList.length;
 
-    cumulativeMttr += mttr;
-    const mttrYtd = cumulativeMttr / (idx + 1);
+    const retailData = filteredData.filter(i => i["Category"] === "Retail");
+    const enterpriseData = filteredData.filter(i => i["Category"] === "Enterprise");
+    const retailInSLA = retailData.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
+    const retailOutSLA = retailData.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
+    const enterpriseInSLA = enterpriseData.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
+    const enterpriseOutSLA = enterpriseData.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
+    const retailPerc = retailData.length > 0 ? ((retailInSLA / retailData.length) * 100).toFixed(1) : 0;
+    const entPerc = enterpriseData.length > 0 ? ((enterpriseInSLA / enterpriseData.length) * 100).toFixed(1) : 0;
+    
+    const pieData = totalTT > 0 ? [{ name: 'Closed TT', value: completedTT }, { name: 'Open TT', value: activeTT }] : [{ name: 'No Data', value: 1 }];
 
     return { 
-      name: wk, 
-      "VIP SLA": vipAchieve, 
-      "Non-VIP SLA": nonVipAchieve, 
-      "MTTR": mttr, 
-      "MTTR YTD": mttrYtd, 
-      "Target": 99 
+      totalTT, activeTT, activeTTList, completedTT, completedTTList, overdueMTTR, overdueMTTRList, 
+      inSLA, inSLAList, outSLA, outSLAList, 
+      retailData, enterpriseData, retailInSLA, retailOutSLA, enterpriseInSLA, enterpriseOutSLA, 
+      retailPerc, entPerc, pieData 
     };
-  });
+  }, [filteredData]);
+
+  const siteOptions = useMemo(() => [...new Set(filteredData.map(i => i["Site"]).filter(Boolean))].map(s => ({ value: s, label: s })), [filteredData]);
+  const uniqueClusters = useMemo(() => [...new Set(filteredData.map(i => i["Cluster"]).filter(Boolean))], [filteredData]);
+
+  const tableDataProcessed = useMemo(() => {
+    let baseTableData = (tableStartDate || tableEndDate) ? data : filteredData;
+    return baseTableData.filter(i => {
+      if (tableStartDate || tableEndDate) {
+        const formattedItemDate = parseDateToYYYYMMDD(i["Start Time"] || i["Timestamp"]);
+        if (!formattedItemDate) return false;
+        if (tableStartDate && formattedItemDate < tableStartDate) return false;
+        if (tableEndDate && formattedItemDate > tableEndDate) return false;
+      }
+      if (tableDetailFilter === 'Active' && !i["Status TT"]?.toLowerCase().includes("open")) return false;
+      if (tableDetailFilter === 'Out SLA' && !i["SLA Real"]?.toLowerCase().includes("out")) return false;
+      if (tableDetailFilter === 'Overdue MTTR' && !(i["Status TT"]?.toLowerCase().includes("open") && i["SLA Real"]?.toLowerCase().includes("out"))) return false;
+      if (tableSla === 'In SLA' && !i["SLA Real"]?.toLowerCase().includes("in")) return false;
+      if (tableSla === 'Out SLA' && !i["SLA Real"]?.toLowerCase().includes("out")) return false;
+      if (tableCluster !== 'All' && i["Cluster"] !== tableCluster) return false;
+      if (tableCategory !== 'All' && i["Category"] !== tableCategory) return false;
+      
+      if (tableVipFilter === 'VIP' && !checkIsVIP(i)) return false;
+      if (tableVipFilter === 'Non VIP' && checkIsVIP(i)) return false;
+
+      const hasSiteFilter = tableSite.length > 0;
+      const searchTerms = searchCustomer.trim().toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
+      const hasSearchFilter = searchTerms.length > 0;
+
+      if (hasSiteFilter || hasSearchFilter) {
+        let matchSite = false; if (hasSiteFilter) matchSite = tableSite.some(opt => opt.value === i["Site"]);
+        let matchSearch = false;
+        if (hasSearchFilter) {
+          const customerInfo = (i["ID dan Nama Customer"] || "").toLowerCase(); const ttNo = (i["TT No"] || "").toLowerCase();
+          matchSearch = searchTerms.some(term => customerInfo.includes(term) || ttNo.includes(term));
+        }
+        if (hasSiteFilter && hasSearchFilter) { if (!matchSite && !matchSearch) return false; } 
+        else if (hasSiteFilter && !matchSite) return false;
+        else if (hasSearchFilter && !matchSearch) return false;
+      }
+      return true;
+    });
+  }, [data, filteredData, tableStartDate, tableEndDate, tableDetailFilter, tableSla, tableCluster, tableCategory, tableVipFilter, tableSite, searchCustomer]);
+
+  const barData = useMemo(() => {
+    let baseRcaData = rcaDataSource === 'Global' ? filteredData : tableDataProcessed;
+    const rootCauseCounts = baseRcaData.reduce((acc, i) => { acc[i["Root Cause"] || "Unspecified"] = (acc[i["Root Cause"] || "Unspecified"] || 0) + 1; return acc; }, {});
+    return Object.keys(rootCauseCounts).map(k => ({ name: k, Total: rootCauseCounts[k] })).sort((a,b)=>b.Total-a.Total);
+  }, [filteredData, tableDataProcessed, rcaDataSource]);
+
+  const mttrDataAnalysis = useMemo(() => {
+    let cumulativeMttr = 0;
+    return uniqueWeeks.map((wk, idx) => {
+      const wkData = data.filter(d => d.Week === wk);
+      const vipData = wkData.filter(d => checkIsVIP(d));
+      const nonVipData = wkData.filter(d => !checkIsVIP(d));
+
+      const calcSla = (arr) => arr.length === 0 ? 0 : (arr.filter(d => String(d["SLA Real"]).toLowerCase().includes("in")).length / arr.length) * 100;
+      const vipAchieve = calcSla(vipData);
+      const nonVipAchieve = calcSla(nonVipData);
+      const mttr = (vipData.length === 0 && nonVipData.length === 0) ? 0 : (vipAchieve + nonVipAchieve) / 2;
+
+      cumulativeMttr += mttr;
+      return { name: wk, "VIP SLA": vipAchieve, "Non-VIP SLA": nonVipAchieve, "MTTR": mttr, "MTTR YTD": cumulativeMttr / (idx + 1), "Target": 99 };
+    });
+  }, [data, uniqueWeeks]);
+
+  const openModalDataList = (title, dataList) => {
+    setListModalData({ title, data: dataList });
+  };
+
+  const openSlaDetail = (category, slaStatus) => {
+    let list = category === 'Retail' ? metrics.retailData : metrics.enterpriseData;
+    const specificData = list.filter(i => slaStatus === 'In SLA' ? i["SLA Real"]?.toLowerCase().includes("in") : i["SLA Real"]?.toLowerCase().includes("out"));
+    openModalDataList(`Data SLA ${category} (${slaStatus})`, specificData);
+  };
+
+  const handlePieClick = (entry) => {
+    if (entry.name === 'Closed TT') openModalDataList('Detail: Closed TT', metrics.completedTTList);
+    else if (entry.name === 'Open TT') openModalDataList('Detail: Open TT', metrics.activeTTList);
+  };
+
+  const openTicketDetail = (ticket) => {
+    setViewTicket(ticket);
+    setEditFormData(ticket);
+    setIsEditing(false);
+  };
+
+  const handleInputChange = (key, value) => {
+    setEditFormData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveTicket = async () => {
+    const updatedData = data.map(item => item["TT No"] === editFormData["TT No"] ? editFormData : item);
+    setData(updatedData);
+
+    try {
+      console.log("Mock API Update Success:", editFormData);
+    } catch(error) {
+      console.error("Gagal menyimpan:", error);
+      alert("Gagal menyimpan data ke server.");
+    }
+
+    setViewTicket(editFormData);
+    setIsEditing(false);
+    
+    if (listModalData) {
+      setListModalData(prev => ({
+        ...prev,
+        data: prev.data.map(item => item["TT No"] === editFormData["TT No"] ? editFormData : item)
+      }));
+    }
+  };
 
   const exportToExcel = () => {
     if (tableDataProcessed.length === 0) { alert("Tidak ada data untuk didownload sesuai filter saat ini."); return; }
@@ -249,6 +291,108 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a'); link.href = url; link.download = `Report_NOC_Tickets_${new Date().toISOString().split('T')[0]}.xls`;
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  };
+
+  // --- FUNGSI DOWNLOAD GAMBAR AREA MTTR ---
+ // --- FUNGSI DOWNLOAD GAMBAR AREA MTTR ---
+  const handleDownloadMttrImage = async () => {
+    const element = mttrSectionRef.current;
+    if (!element) return;
+
+    try {
+      const tableScrollArea = element.querySelector('.mttr-table-scroll');
+      const chartBox = element.querySelector('.mttr-chart-box'); // Ambil elemen chart
+      
+      // 1. Simpan gaya asli
+      const originalContainerWidth = element.style.width;
+      const originalPadding = element.style.padding;
+      const originalTableOverflow = tableScrollArea ? tableScrollArea.style.overflow : '';
+      const originalChartWidth = chartBox ? chartBox.style.width : '';
+
+      // 2. Hitung lebar asli konten tabel yang tersembunyi
+      const fullWidth = tableScrollArea ? tableScrollArea.scrollWidth : element.offsetWidth;
+
+      // 3. Paksa kontainer utama dan chart memanjang ke kanan sesuai ukuran asli tabel
+      element.style.width = `${fullWidth + 40}px`; // +40px untuk margin/padding
+      element.style.padding = '20px';
+      
+      if (tableScrollArea) {
+        tableScrollArea.style.overflow = 'visible';
+      }
+      if (chartBox) {
+        // Paksa lebar kotak grafik mengikuti lebar tabel agar garisnya ikut memanjang
+        chartBox.style.width = `${fullWidth}px`; 
+      }
+
+      // 4. Beri jeda 500ms agar Recharts selesai merender animasi perubahaan ukurannya
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 5. Proses Capture Gambar
+      const canvas = await html2canvas(element, {
+        scale: 2, 
+        backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', 
+        useCORS: true,
+        windowWidth: fullWidth + 100 // Trik agar tidak terpotong viewport layar monitor Anda
+      });
+
+      // 6. Kembalikan gaya DOM ke kondisi semula agar tampilan dashboard normal kembali
+      element.style.width = originalContainerWidth;
+      element.style.padding = originalPadding; 
+      
+      if (tableScrollArea) {
+        tableScrollArea.style.overflow = originalTableOverflow;
+      }
+      if (chartBox) {
+        chartBox.style.width = originalChartWidth;
+      }
+
+      // 7. Download hasilnya
+      const imageURL = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = imageURL;
+      link.download = `MTTR_SLA_Analysis_${new Date().toISOString().split('T')[0]}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } catch (error) {
+      console.error("Gagal men-download gambar:", error);
+      alert("Terjadi kesalahan saat memproses gambar.");
+    }
+  };
+
+  const PIE_COLORS = metrics.totalTT > 0 ? ['#10b981', '#f59e0b'] : [isDarkMode ? '#334155' : '#e5e7eb']; 
+
+  const renderCustomPieLabel = ({ cx, cy, midAngle, outerRadius, value, index }) => {
+    if (value === 0 || metrics.totalTT === 0) return null; 
+    const RADIAN = Math.PI / 180; const radius = outerRadius + 15; 
+    const x = cx + radius * Math.cos(-midAngle * RADIAN); const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return (<text x={x} y={y} fill={PIE_COLORS[index % PIE_COLORS.length]} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontWeight="bold" fontSize="16" style={{cursor: 'pointer'}}>{value}</text>);
+  };
+
+  const renderCustomBarLabel = (props) => {
+    const { x, y, width, height, value, index } = props;
+    if (!barData[index]) return null;
+    const name = barData[index].name;
+    const isShort = height < 80; 
+    return (
+      <g>
+        <text x={x + width / 2} y={isShort ? y - 10 : y - 10} fill={isDarkMode ? '#f8fafc' : '#334155'} fontSize={12} fontWeight="bold" textAnchor="middle">
+          {value}
+        </text>
+        <text 
+          x={x + width / 2} 
+          y={isShort ? y - 30 : y + height - 15} 
+          fill={isShort ? (isDarkMode ? '#94a3b8' : '#64748b') : '#ffffff'} 
+          fontSize={11} 
+          fontWeight={isShort ? "normal" : "bold"} 
+          textAnchor="start" 
+          transform={`rotate(-90, ${x + width / 2}, ${isShort ? y - 30 : y + height - 15})`}
+        >
+          {name}
+        </text>
+      </g>
+    );
   };
 
   const tableHeaders = ['TT No', 'Customer', 'Cluster', 'Root Cause', 'Category', 'Deskripsi Awal', 'Progress Update', 'NOC'];
@@ -295,12 +439,18 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         .dash-header-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
         
         .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); margin-bottom: var(--gap); }
-        .metric-card { background: var(--bg-card); border-radius: var(--border-radius); padding: var(--card-padding); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .metric-card { background: var(--bg-card); border-radius: var(--border-radius); padding: var(--card-padding); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: transform 0.2s, box-shadow 0.2s; }
         
         .middle-grid { display: grid; grid-template-columns: 1.2fr 1fr 1.5fr; gap: var(--gap); margin-bottom: var(--gap); align-items: stretch; }
         .middle-card { background: var(--bg-card); padding: var(--card-padding); border-radius: var(--border-radius); border: 1px solid var(--border); display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: var(--gap); }
         .sla-split { display: flex; gap: 16px; flex: 1; margin-top: 16px; }
         
+        .clickable-box { cursor: pointer; transition: filter 0.2s, transform 0.1s; }
+        .clickable-box:hover { filter: brightness(0.95); transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        .sla-bar-segment { display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: bold; color: #fff; cursor: pointer; transition: filter 0.2s; }
+        .sla-bar-segment:hover { filter: brightness(0.85); }
+
         .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; width: 100%; margin-bottom: 16px; align-items: center; }
         .filter-input { height: 34px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 0.85rem; flex: 1 1 150px; min-width: 120px; background: var(--input-bg); color: var(--text-main); box-sizing: border-box; outline: none; }
         .filter-input[type="date"]::-webkit-calendar-picker-indicator { filter: ${isDarkMode ? 'invert(1)' : 'none'}; cursor: pointer; }
@@ -324,7 +474,7 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         tbody tr:hover { background-color: var(--table-hover); }
         tbody td { padding: 10px 14px; color: var(--text-main); }
 
-        .mttr-container { display: flex; flex-direction: column; gap: var(--gap); }
+        .mttr-container { display: flex; flex-direction: column; gap: var(--gap); border-radius: 8px; }
         .mttr-chart-box { height: 350px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); padding: 16px; box-sizing: border-box; }
         .mttr-table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); }
         .matrix-table { width: 100%; min-width: max-content; }
@@ -332,6 +482,9 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         .matrix-table td { text-align: center; font-weight: 600; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 10px 8px; white-space: nowrap; }
         .matrix-table tbody tr:last-child td { border-bottom: none; }
         .sticky-col { position: sticky; left: 0; background-color: var(--input-bg); z-index: 2; border-right: 2px solid var(--border) !important; text-align: left !important; padding-left: 14px !important; }
+
+        .edit-input { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text-main); font-family: 'Inter', sans-serif; font-size: 0.95rem; box-sizing: border-box; }
+        .edit-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
 
         @media (max-width: 768px) {
           .dash-wrapper { padding: 12px; --gap: 16px; --card-padding: 16px; }
@@ -347,7 +500,6 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
 
       {/* HEADER & GLOBAL FILTER */}
       <div className="dash-header">
-        {/* JUDUL DIUBAH MENJADI DASHBOARD NOC */}
         <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: 0, color: 'var(--text-main)' }}>Dashboard NOC</h2>
         
         {!isKioskMode && (
@@ -380,9 +532,9 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
       
       {/* ROW 1: METRICS */}
       <div className="metrics-grid">
-        <div className="metric-card" style={{ borderLeft: '6px solid #3b82f6' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Total Tickets</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'var(--text-main)'}}>{totalTT}</h3></div>
-        <div className="metric-card" style={{ borderLeft: '6px solid #f59e0b' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Active Tickets (Open)</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'var(--text-main)'}}>{activeTT}</h3></div>
-        <div className="metric-card" style={{ borderLeft: '6px solid #ef4444' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Overdue MTTR</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'#ef4444'}}>{overdueMTTR}</h3></div>
+        <div className="metric-card clickable-box" onClick={() => openModalDataList('Total Tickets', filteredData)} style={{ borderLeft: '6px solid #3b82f6' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Total Tickets</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'var(--text-main)'}}>{metrics.totalTT}</h3></div>
+        <div className="metric-card clickable-box" onClick={() => openModalDataList('Active Tickets (Open)', metrics.activeTTList)} style={{ borderLeft: '6px solid #f59e0b' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Active Tickets (Open)</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'var(--text-main)'}}>{metrics.activeTT}</h3></div>
+        <div className="metric-card clickable-box" onClick={() => openModalDataList('Overdue MTTR Tickets', metrics.overdueMTTRList)} style={{ borderLeft: '6px solid #ef4444' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Overdue MTTR</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'#ef4444'}}>{metrics.overdueMTTR}</h3></div>
       </div>
 
       {/* ROW 2: PIE & SLA PERFORMANCE */}
@@ -392,8 +544,8 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
           <div style={{ flex: 1, minHeight: 250 }}>
             <ResponsiveContainer>
               <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none" label={renderCustomLabel} labelLine={false}>
-                  {pieData.map((e, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                <Pie data={metrics.pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none" label={renderCustomPieLabel} labelLine={false} onClick={handlePieClick} style={{cursor: 'pointer'}}>
+                  {metrics.pieData.map((e, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                 </Pie>
                 <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', color: isDarkMode ? '#f8fafc' : '#0f172a', borderRadius: '8px' }} />
                 <Legend wrapperStyle={{ color: 'var(--text-muted)', fontSize: '0.85rem' }} />
@@ -403,18 +555,18 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <div style={{ backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.1)' : '#f0fdf4', border: `1px solid ${isDarkMode ? '#065f46' : '#bbf7d0'}`, padding: 'var(--card-padding)', borderRadius: 'var(--border-radius)', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div className="clickable-box" onClick={() => openModalDataList('Completed TT', metrics.completedTTList)} style={{ backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.1)' : '#f0fdf4', border: `1px solid ${isDarkMode ? '#065f46' : '#bbf7d0'}`, padding: 'var(--card-padding)', borderRadius: 'var(--border-radius)', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <p style={{margin:0, fontSize:'0.85rem', color:'#10b981', fontWeight:'bold'}}>COMPLETED TT</p>
-            <h2 style={{margin:'8px 0 0', fontSize:'2.5rem', color:'#10b981'}}>{completedTT}</h2>
+            <h2 style={{margin:'8px 0 0', fontSize:'2.5rem', color:'#10b981'}}>{metrics.completedTT}</h2>
           </div>
           <div className="sla-split">
-            <div style={{ backgroundColor: isDarkMode ? 'rgba(5, 150, 105, 0.1)' : '#ecfdf5', border: `1px solid ${isDarkMode ? '#064e3b' : '#a7f3d0'}`, padding: '16px', borderRadius: 'var(--border-radius)', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="clickable-box" onClick={() => openModalDataList('All Tickets - IN SLA', metrics.inSLAList)} style={{ backgroundColor: isDarkMode ? 'rgba(5, 150, 105, 0.1)' : '#ecfdf5', border: `1px solid ${isDarkMode ? '#064e3b' : '#a7f3d0'}`, padding: '16px', borderRadius: 'var(--border-radius)', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <p style={{margin:0, fontSize:'0.8rem', color:'#059669', fontWeight:'bold'}}>IN SLA</p>
-              <h3 style={{margin:'8px 0 0', fontSize:'1.8rem', color:'#059669'}}>{inSLA}</h3>
+              <h3 style={{margin:'8px 0 0', fontSize:'1.8rem', color:'#059669'}}>{metrics.inSLA}</h3>
             </div>
-            <div style={{ backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.1)' : '#fef2f2', border: `1px solid ${isDarkMode ? '#7f1d1d' : '#fecaca'}`, padding: '16px', borderRadius: 'var(--border-radius)', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="clickable-box" onClick={() => openModalDataList('All Tickets - OUT SLA', metrics.outSLAList)} style={{ backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.1)' : '#fef2f2', border: `1px solid ${isDarkMode ? '#7f1d1d' : '#fecaca'}`, padding: '16px', borderRadius: 'var(--border-radius)', textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <p style={{margin:0, fontSize:'0.8rem', color:'#ef4444', fontWeight:'bold'}}>OUT SLA</p>
-              <h3 style={{margin:'8px 0 0', fontSize:'1.8rem', color:'#ef4444'}}>{outSLA}</h3>
+              <h3 style={{margin:'8px 0 0', fontSize:'1.8rem', color:'#ef4444'}}>{metrics.outSLA}</h3>
             </div>
           </div>
         </div>
@@ -422,46 +574,25 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         <div className="middle-card" style={{ justifyContent: 'center', marginBottom: 0 }}>
           <h4 style={{ margin: '0 0 20px', color: 'var(--text-main)' }}>SLA Performance by Category</h4>
           
-          {/* RETAIL */}
           <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>Retail <span style={{color:'#10b981'}}>{retailPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {retailData.length}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>Retail <span style={{color:'#10b981'}}>{metrics.retailPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {metrics.retailData.length}</span></div>
             <div style={{ display: 'flex', height: '30px', borderRadius: '8px', overflow: 'hidden', background: isDarkMode ? '#334155' : '#e2e8f0' }}>
-              <div style={{ width: `${(retailInSLA/retailData.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{retailInSLA||''}</div>
-              <div style={{ width: `${(retailOutSLA/retailData.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{retailOutSLA||''}</div>
+              <div className="sla-bar-segment" onClick={() => openSlaDetail('Retail', 'In SLA')} style={{ width: `${(metrics.retailInSLA/metrics.retailData.length)*100 || 0}%`, background: '#10b981' }}>{metrics.retailInSLA||''}</div>
+              <div className="sla-bar-segment" onClick={() => openSlaDetail('Retail', 'Out SLA')} style={{ width: `${(metrics.retailOutSLA/metrics.retailData.length)*100 || 0}%`, background: '#ef4444' }}>{metrics.retailOutSLA||''}</div>
             </div>
           </div>
           
-          {/* ENTERPRISE */}
           <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>Enterprise <span style={{color:'#10b981'}}>{entPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {enterpriseData.length}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>Enterprise <span style={{color:'#10b981'}}>{metrics.entPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {metrics.enterpriseData.length}</span></div>
             <div style={{ display: 'flex', height: '30px', borderRadius: '8px', overflow: 'hidden', background: isDarkMode ? '#334155' : '#e2e8f0' }}>
-              <div style={{ width: `${(enterpriseInSLA/enterpriseData.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{enterpriseInSLA||''}</div>
-              <div style={{ width: `${(enterpriseOutSLA/enterpriseData.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{enterpriseOutSLA||''}</div>
+              <div className="sla-bar-segment" onClick={() => openSlaDetail('Enterprise', 'In SLA')} style={{ width: `${(metrics.enterpriseInSLA/metrics.enterpriseData.length)*100 || 0}%`, background: '#10b981' }}>{metrics.enterpriseInSLA||''}</div>
+              <div className="sla-bar-segment" onClick={() => openSlaDetail('Enterprise', 'Out SLA')} style={{ width: `${(metrics.enterpriseOutSLA/metrics.enterpriseData.length)*100 || 0}%`, background: '#ef4444' }}>{metrics.enterpriseOutSLA||''}</div>
             </div>
           </div>
-
-          {/* VIP (BARU) */}
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>VIP <span style={{color:'#10b981'}}>{vipPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {vipDataList.length}</span></div>
-            <div style={{ display: 'flex', height: '30px', borderRadius: '8px', overflow: 'hidden', background: isDarkMode ? '#334155' : '#e2e8f0' }}>
-              <div style={{ width: `${(vipInSLA/vipDataList.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{vipInSLA||''}</div>
-              <div style={{ width: `${(vipOutSLA/vipDataList.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{vipOutSLA||''}</div>
-            </div>
-          </div>
-
-          {/* NON VIP (BARU) */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '10px' }}><span style={{color:'var(--text-main)'}}>Non VIP <span style={{color:'#10b981'}}>{nonVipPerc}% In SLA</span></span><span style={{color:'var(--text-muted)'}}>Total: {nonVipDataList.length}</span></div>
-            <div style={{ display: 'flex', height: '30px', borderRadius: '8px', overflow: 'hidden', background: isDarkMode ? '#334155' : '#e2e8f0' }}>
-              <div style={{ width: `${(nonVipInSLA/nonVipDataList.length)*100 || 0}%`, background: '#10b981', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{nonVipInSLA||''}</div>
-              <div style={{ width: `${(nonVipOutSLA/nonVipDataList.length)*100 || 0}%`, background: '#ef4444', color: '#fff', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{nonVipOutSLA||''}</div>
-            </div>
-          </div>
-
         </div>
       </div>
 
-      {/* ROW 3: RCA CHART (FULL WIDTH) */}
+      {/* ROW 3: RCA CHART */}
       <div className="middle-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
           <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem' }}>Root Cause Analysis</h3>
@@ -473,17 +604,15 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
             </div>
           )}
         </div>
-        <div style={{ width: '100%', height: 320 }}>
+        <div style={{ width: '100%', height: 360 }}> 
           {barData.length > 0 ? (
             <ResponsiveContainer>
-              <BarChart data={barData} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={barData} margin={{ top: 90, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#e2e8f0'} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12}} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={false} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12}} />
                 <RechartsTooltip cursor={{fill: isDarkMode ? '#334155' : '#f1f5f9'}} contentStyle={{backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#475569' : '#e2e8f0', color: isDarkMode ? '#f8fafc' : '#0f172a', borderRadius: '8px'}} />
-                <Bar dataKey="Total" fill={rcaDataSource === 'Global' ? "#3b82f6" : "#10b981"} radius={[4, 4, 0, 0]} barSize={45}>
-                  <LabelList dataKey="Total" position="top" fill={isDarkMode ? '#f8fafc' : '#334155'} fontSize={12} fontWeight="bold" offset={10} />
-                </Bar>
+                <Bar dataKey="Total" fill={rcaDataSource === 'Global' ? "#3b82f6" : "#10b981"} radius={[4, 4, 0, 0]} barSize={45} label={renderCustomBarLabel} />
               </BarChart>
             </ResponsiveContainer>
           ) : ( <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Data tidak ditemukan.</div> )}
@@ -515,6 +644,13 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         {!isKioskMode && (
           <div className="filter-bar">
             <input type="text" placeholder="Cari ID/Nama/TT (koma)..." value={searchCustomer} onChange={e=>setSearchCustomer(e.target.value)} className="filter-input" />
+            
+            <select value={tableVipFilter} onChange={e=>setTableVipFilter(e.target.value)} className="filter-input">
+              <option value="All">All Type (VIP/Non)</option>
+              <option value="VIP">VIP</option>
+              <option value="Non VIP">Non VIP</option>
+            </select>
+            
             <select value={tableSla} onChange={e=>setTableSla(e.target.value)} className="filter-input"><option value="All">All SLA</option><option value="In SLA">In SLA</option><option value="Out SLA">Out SLA</option></select>
             <select value={tableCategory} onChange={e=>setTableCategory(e.target.value)} className="filter-input"><option value="All">All Category</option><option value="Retail">Retail</option><option value="Enterprise">Enterprise</option></select>
             <div className="filter-select-container">
@@ -557,7 +693,7 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
                     <td style={{ fontWeight: '600', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>{r["NOC"] || "-"}</td>
                     
                     {!isKioskMode && (
-                      <td><button onClick={() => setViewTicket(r)} style={{ padding: '6px 14px', backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', color: 'var(--text-main)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}>Lihat</button></td>
+                      <td><button onClick={() => openTicketDetail(r)} style={{ padding: '6px 14px', backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', color: 'var(--text-main)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}>Lihat / Edit</button></td>
                     )}
                     
                     <td style={{ whiteSpace: 'nowrap' }}><span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isOutSla ? '#ef4444' : '#10b981', marginRight: '6px' }}></span><span style={{ color: isOutSla ? '#ef4444' : '#10b981', fontWeight: '700' }}>{r["SLA Real"] || '-'}</span></td>
@@ -571,13 +707,24 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         </div>
       </div>
 
-      {/* ROW 5: MTTR YTD TRACKING */}
+      {/* ROW 5: MTTR YTD TRACKING (DENGAN TOMBOL DOWNLOAD SCREENSHOT) */}
       <div className="middle-card" style={{ marginBottom: 0 }}>
-        <h3 style={{ margin: '0 0 20px 0', color: 'var(--text-main)', fontSize: '1.1rem' }}>MTTR & SLA Weekly Analysis YTD</h3>
         
-        <div className="mttr-container">
+        {/* Header MTTR dengan tombol download */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+          <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem' }}>MTTR & SLA Weekly Analysis YTD</h3>
+          {!isKioskMode && (
+            <button onClick={handleDownloadMttrImage} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', borderColor: '#3b82f6', color: '#3b82f6' }}>
+              📸 Download Gambar
+            </button>
+          )}
+        </div>
+        
+        {/* AREA INI YANG AKAN DI SCREENSHOT */}
+        <div className="mttr-container" ref={mttrSectionRef} style={{ backgroundColor: 'var(--bg-card)', padding: '10px' }}>
           
-          <div className="mttr-chart-box">
+          
+            <div className="mttr-chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={mttrDataAnalysis} margin={{ top: 35, right: 20, bottom: 5, left: -10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e2e8f0'} />
@@ -586,11 +733,13 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
                 <RechartsTooltip contentStyle={{backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#475569' : '#e2e8f0', color: isDarkMode ? '#f8fafc' : '#0f172a', borderRadius: '8px'}} />
                 <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '0.85rem' }} />
                 
-                <Line type="monotone" dataKey="MTTR YTD" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 5, strokeWidth: 2, fill: isDarkMode ? '#1e293b' : '#fff' }} activeDot={{ r: 8 }}>
+                {/* PENAMBAHAN: isAnimationActive={false} untuk mematikan animasi */}
+                <Line type="monotone" dataKey="MTTR YTD" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 5, strokeWidth: 2, fill: isDarkMode ? '#1e293b' : '#fff' }} activeDot={{ r: 8 }} isAnimationActive={false}>
                   <LabelList dataKey="MTTR YTD" position="top" offset={12} formatter={(val) => `${val.toFixed(1)}%`} fill={isDarkMode ? '#f8fafc' : '#334155'} fontSize={11} fontWeight="bold" />
                 </Line>
                 
-                <Line type="monotone" dataKey="Target" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                {/* PENAMBAHAN: isAnimationActive={false} untuk garis target */}
+                <Line type="monotone" dataKey="Target" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={false} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -631,28 +780,108 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         </div>
       </div>
 
-      {/* MODAL POP-UP DETAILS */}
+      {/* ----------------- MODAL POPUP UNIVERSAL (LIST DATA) ----------------- */}
+      {listModalData && !isKioskMode && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.85)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px', boxSizing: 'border-box', backdropFilter: 'blur(4px)' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', width: '100%', maxWidth: '1400px', height: '85vh', maxHeight: '90vh', borderRadius: '16px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+            <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-main)', borderRadius: '16px 16px 0 0', flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-main)' }}>{listModalData.title} <span style={{fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 'normal'}}>({listModalData.data.length} entries)</span></h2>
+              <button onClick={() => setListModalData(null)} style={{ background: 'none', border: 'none', fontSize: '2rem', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1, transition: '0.2s' }}>&times;</button>
+            </div>
+            
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-card)', borderRadius: '0 0 16px 16px' }}>
+              <div className="table-container" style={{maxHeight: 'none', height: '100%'}}>
+                <table>
+                  <thead>
+                    <tr>
+                      {tableHeaders.map(h => (<th key={h}>{h}</th>))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {listModalData.data.map((r, i) => {
+                      const isOp = r["Status TT"]?.toLowerCase().includes("open"); const isOutSla = r["SLA Real"]?.toLowerCase().includes("out");
+                      return (
+                        <tr key={i}>
+                          <td style={{ fontWeight: '600', color: 'var(--text-main)' }}>{r["TT No"]}</td>
+                          <td style={{ color: 'var(--text-muted)' }}>{r["ID dan Nama Customer"]}</td>
+                          <td style={{ color: 'var(--text-muted)' }}>{r["Cluster"]}</td>
+                          <td style={{ color: 'var(--text-muted)' }}>{r["Root Cause"]}</td>
+                          <td style={{ color: 'var(--text-muted)' }}>{r["Category"]}</td>
+                          <td style={{ minWidth: '150px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{r["Deskripsi Awal"] || r["Deskripsi"] || "-"}</td>
+                          <td style={{ minWidth: '150px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{r["Progress Update"] || "-"}</td>
+                          <td style={{ fontWeight: '600', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>{r["NOC"] || "-"}</td>
+                          
+                          <td><button onClick={() => openTicketDetail(r)} style={{ padding: '6px 14px', backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', color: 'var(--text-main)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}>Lihat / Edit</button></td>
+                          
+                          <td style={{ whiteSpace: 'nowrap' }}><span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isOutSla ? '#ef4444' : '#10b981', marginRight: '6px' }}></span><span style={{ color: isOutSla ? '#ef4444' : '#10b981', fontWeight: '700' }}>{r["SLA Real"] || '-'}</span></td>
+                          <td><span style={{ padding: '4px 10px', borderRadius: '20px', fontWeight: '700', fontSize: '0.7rem', textTransform: 'uppercase', whiteSpace: 'nowrap', backgroundColor: isOp ? 'rgba(217, 119, 6, 0.15)' : 'rgba(16, 185, 129, 0.15)', color: isOp ? '#d97706' : '#10b981' }}>{r["Status TT"]}</span></td>
+                        </tr>
+                      );
+                    })}
+                    {listModalData.data.length === 0 && (<tr><td colSpan="11" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Tidak ada data tiket pada kategori ini.</td></tr>)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------- MODAL POP-UP DETAIL SPESIFIK & EDIT TIKET ----------------- */}
       {viewTicket && !isKioskMode && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.85)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px', boxSizing: 'border-box', backdropFilter: 'blur(4px)' }}>
           <div style={{ backgroundColor: 'var(--bg-card)', width: '100%', maxWidth: '1200px', height: '85vh', maxHeight: '90vh', borderRadius: '16px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+            
             <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-main)', borderRadius: '16px 16px 0 0', flexShrink: 0 }}>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-main)' }}>Detail Tiket: <span style={{ color: '#3b82f6' }}>{viewTicket["TT No"]}</span></h2>
-              <button onClick={() => setViewTicket(null)} style={{ background: 'none', border: 'none', fontSize: '2rem', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1, transition: '0.2s' }}>&times;</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--text-main)' }}>Detail Tiket: <span style={{ color: '#3b82f6' }}>{viewTicket["TT No"]}</span></h2>
+                {isEditing ? (
+                  <span style={{ backgroundColor: '#f59e0b', color: '#fff', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold' }}>Mode Edit Aktif</span>
+                ) : null}
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {!isEditing ? (
+                  <button onClick={() => setIsEditing(true)} className="btn-secondary" style={{ borderColor: '#3b82f6', color: '#3b82f6' }}>✏️ Edit Data</button>
+                ) : (
+                  <>
+                    <button onClick={() => setIsEditing(false)} className="btn-secondary" style={{ color: '#ef4444' }}>Batal</button>
+                    <button onClick={handleSaveTicket} className="btn-primary" style={{ backgroundColor: '#3b82f6' }}>💾 Simpan Perubahan</button>
+                  </>
+                )}
+                
+                <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 4px' }}></div>
+                <button onClick={() => setViewTicket(null)} style={{ background: 'none', border: 'none', fontSize: '2rem', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1, transition: '0.2s' }}>&times;</button>
+              </div>
             </div>
             
             <div style={{ padding: '32px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-card)', borderRadius: '0 0 16px 16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
                 {Object.entries(viewTicket).map(([key, value]) => {
                   if (!key || key.trim() === '') return null; 
+                  
+                  const isReadOnly = key === 'TT No'; 
+
                   return (
-                    <div key={key} style={{ backgroundColor: 'var(--bg-main)', padding: '16px 20px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                    <div key={key} style={{ backgroundColor: isEditing && !isReadOnly ? 'var(--bg-card)' : 'var(--bg-main)', padding: '16px 20px', borderRadius: '10px', border: `1px solid ${isEditing && !isReadOnly ? '#3b82f6' : 'var(--border)'}`, transition: '0.2s' }}>
                       <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>{key}</span>
-                      <span style={{ fontSize: '1rem', color: 'var(--text-main)', wordBreak: 'break-word', fontWeight: '500', lineHeight: '1.5' }}>{value || '-'}</span>
+                      
+                      {isEditing && !isReadOnly ? (
+                        <input 
+                          type="text" 
+                          className="edit-input" 
+                          value={editFormData[key] || ''} 
+                          onChange={(e) => handleInputChange(key, e.target.value)} 
+                        />
+                      ) : (
+                        <span style={{ fontSize: '1rem', color: 'var(--text-main)', wordBreak: 'break-word', fontWeight: '500', lineHeight: '1.5' }}>{value || '-'}</span>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
+            
           </div>
         </div>
       )}
