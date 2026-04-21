@@ -233,9 +233,23 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
     return Object.keys(metricCounts).map(k => ({ name: k, Total: metricCounts[k] })).sort((a,b)=>b.Total-a.Total);
   }, [filteredData, tableDataProcessed, rcaDataSource, chartMetric]);
 
+  // ==========================================================
+  // UPDATE: LOGIKA FILTER MTTR AGAR HANYA MENAMPILKAN MINGGU YANG SUDAH SELESAI
   const mttrDataAnalysis = useMemo(() => {
     let cumulativeMttr = 0;
-    return uniqueWeeks.map((wk, idx) => {
+    
+    // Ambil string week saat ini (misal "W17")
+    const currentWeekStr = getCurrentWeekStr();
+    // Konversi ke angka untuk dibandingkan
+    const currentWeekNum = parseInt(currentWeekStr.replace(/\D/g, ''));
+
+    // Filter uniqueWeeks: hanya masukkan minggu yang angkanya lebih kecil dari minggu ini
+    const finishedWeeks = uniqueWeeks.filter(wk => {
+      const wkNum = parseInt(wk.replace(/\D/g, ''));
+      return wkNum < currentWeekNum;
+    });
+
+    return finishedWeeks.map((wk, idx) => {
       const wkData = data.filter(d => d.Week === wk);
       const vipData = wkData.filter(d => checkIsVIP(d));
       const nonVipData = wkData.filter(d => !checkIsVIP(d));
@@ -249,6 +263,7 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
       return { name: wk, "VIP SLA": vipAchieve, "Non-VIP SLA": nonVipAchieve, "MTTR": mttr, "MTTR YTD": cumulativeMttr / (idx + 1), "Target": 99 };
     });
   }, [data, uniqueWeeks]);
+  // ==========================================================
 
   const openModalDataList = (title, dataList) => {
     setListModalData({ title, data: dataList });
@@ -265,7 +280,6 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
     else if (entry.name === 'Open TT') openModalDataList('Detail: Open TT', metrics.activeTTList);
   };
 
-  // =============== FUNGSI BARU UNTUK KLIK BAR ===============
   const handleBarClick = (entry) => {
     if (!entry || !entry.name) return;
     
@@ -279,7 +293,6 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
 
     openModalDataList(`Detail ${chartMetric}: ${entry.name}`, specificData);
   };
-  // ==========================================================
 
   const openTicketDetail = (ticket) => {
     setViewTicket(ticket);
@@ -641,7 +654,6 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={false} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12}} />
                 <RechartsTooltip cursor={{fill: isDarkMode ? '#334155' : '#f1f5f9'}} contentStyle={{backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#475569' : '#e2e8f0', color: isDarkMode ? '#f8fafc' : '#0f172a', borderRadius: '8px'}} />
-                {/* PROPERTI onClick dan style cursor ditambahkan di sini */}
                 <Bar 
                   dataKey="Total" 
                   fill={rcaDataSource === 'Global' ? "#3b82f6" : "#10b981"} 
