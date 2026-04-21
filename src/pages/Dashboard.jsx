@@ -41,6 +41,7 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
   const [endDate, setEndDate] = useState('');
   
   const [rcaDataSource, setRcaDataSource] = useState('Global'); 
+  const [chartMetric, setChartMetric] = useState('Root Cause'); 
   
   const [tableStartDate, setTableStartDate] = useState(''); 
   const [tableEndDate, setTableEndDate] = useState('');     
@@ -221,9 +222,16 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
 
   const barData = useMemo(() => {
     let baseRcaData = rcaDataSource === 'Global' ? filteredData : tableDataProcessed;
-    const rootCauseCounts = baseRcaData.reduce((acc, i) => { acc[i["Root Cause"] || "Unspecified"] = (acc[i["Root Cause"] || "Unspecified"] || 0) + 1; return acc; }, {});
-    return Object.keys(rootCauseCounts).map(k => ({ name: k, Total: rootCauseCounts[k] })).sort((a,b)=>b.Total-a.Total);
-  }, [filteredData, tableDataProcessed, rcaDataSource]);
+    const targetKey = chartMetric === 'Root Cause' ? "Root Cause" : "Restoration Action";
+    
+    const metricCounts = baseRcaData.reduce((acc, i) => { 
+      const val = i[targetKey] || "Unspecified";
+      acc[val] = (acc[val] || 0) + 1; 
+      return acc; 
+    }, {});
+    
+    return Object.keys(metricCounts).map(k => ({ name: k, Total: metricCounts[k] })).sort((a,b)=>b.Total-a.Total);
+  }, [filteredData, tableDataProcessed, rcaDataSource, chartMetric]);
 
   const mttrDataAnalysis = useMemo(() => {
     let cumulativeMttr = 0;
@@ -256,6 +264,22 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
     if (entry.name === 'Closed TT') openModalDataList('Detail: Closed TT', metrics.completedTTList);
     else if (entry.name === 'Open TT') openModalDataList('Detail: Open TT', metrics.activeTTList);
   };
+
+  // =============== FUNGSI BARU UNTUK KLIK BAR ===============
+  const handleBarClick = (entry) => {
+    if (!entry || !entry.name) return;
+    
+    let baseRcaData = rcaDataSource === 'Global' ? filteredData : tableDataProcessed;
+    const targetKey = chartMetric === 'Root Cause' ? "Root Cause" : "Restoration Action";
+    
+    const specificData = baseRcaData.filter(i => {
+      const val = i[targetKey] || "Unspecified";
+      return val === entry.name;
+    });
+
+    openModalDataList(`Detail ${chartMetric}: ${entry.name}`, specificData);
+  };
+  // ==========================================================
 
   const openTicketDetail = (ticket) => {
     setViewTicket(ticket);
@@ -376,7 +400,7 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
     const name = barData[index].name;
     const isShort = height < 80; 
     return (
-      <g>
+      <g style={{ cursor: 'pointer' }}>
         <text x={x + width / 2} y={isShort ? y - 10 : y - 10} fill={isDarkMode ? '#f8fafc' : '#334155'} fontSize={12} fontWeight="bold" textAnchor="middle">
           {value}
         </text>
@@ -591,7 +615,16 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
 
       <div className="middle-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-          <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem' }}>Root Cause Analysis</h3>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem' }}>
+              {chartMetric === 'Root Cause' ? 'Root Cause Analysis' : 'Restoration Action Analysis'}
+            </h3>
+            <div className="toggle-container">
+              <button onClick={() => setChartMetric('Root Cause')} className={`toggle-btn ${chartMetric === 'Root Cause' ? 'toggle-active-global' : 'toggle-inactive'}`}>Root Cause</button>
+              <button onClick={() => setChartMetric('Restoration Action')} className={`toggle-btn ${chartMetric === 'Restoration Action' ? 'toggle-active-table' : 'toggle-inactive'}`}>Action</button>
+            </div>
+          </div>
           
           {!isKioskMode && (
             <div className="toggle-container">
@@ -608,7 +641,16 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={false} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 12}} />
                 <RechartsTooltip cursor={{fill: isDarkMode ? '#334155' : '#f1f5f9'}} contentStyle={{backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#475569' : '#e2e8f0', color: isDarkMode ? '#f8fafc' : '#0f172a', borderRadius: '8px'}} />
-                <Bar dataKey="Total" fill={rcaDataSource === 'Global' ? "#3b82f6" : "#10b981"} radius={[4, 4, 0, 0]} barSize={45} label={renderCustomBarLabel} />
+                {/* PROPERTI onClick dan style cursor ditambahkan di sini */}
+                <Bar 
+                  dataKey="Total" 
+                  fill={rcaDataSource === 'Global' ? "#3b82f6" : "#10b981"} 
+                  radius={[4, 4, 0, 0]} 
+                  barSize={45} 
+                  label={renderCustomBarLabel} 
+                  onClick={handleBarClick}
+                  style={{ cursor: 'pointer' }}
+                />
               </BarChart>
             </ResponsiveContainer>
           ) : ( <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Data tidak ditemukan.</div> )}
