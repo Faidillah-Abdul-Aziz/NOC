@@ -257,7 +257,7 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
                 <div className="input-group">
                   <label className="noc-label required">Category</label>
                   <select className="noc-input" name="Category" value={formData["Category"]} onChange={handleChange} required>
-                    <option value="">-- Kategori --</option><option value="Retail">Retail</option><option value="Enterprise">Enterprise</option>
+                    <option value="">-- Kategori --</option><option value="Retail EA">Retail EA</option><option value="Retail GR">Retail GR</option><option value="Enterprise">Enterprise</option>
                   </select>
                 </div>
                 <div className="input-group">
@@ -403,7 +403,7 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
                 <div className="input-group">
                   <label className="noc-label">Kategori Root Cause</label>
                   <select className="noc-input" name="Root_Cause_Cat" value={formData["Root_Cause_Cat"]} onChange={handleChange}>
-                    <option value="">-- Kategori --</option><option value="Configuration">Configuration</option><option value="FO">FO</option><option value="Equipment">Equipment</option><option value="Lainnya">Manual...</option>
+                    <option value="">-- Kategori --</option><option value="Configuration">Configuration</option><option value="Power">Power</option><option value="FO">FO</option><option value="Equipment">Equipment</option><option value="Lainnya">Manual...</option>
                   </select>
                 </div>
                 
@@ -412,9 +412,9 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
                     <label className="noc-label">Detail Root Cause</label>
                     <select className="noc-input" name="Root_Cause_Sub" value={formData["Root_Cause_Sub"]} onChange={handleChange} disabled={!formData["Root_Cause_Cat"]}>
                       <option value="">-- Detail --</option>
-                      {formData["Root_Cause_Cat"] === "Configuration" && (<><option value="Core">Core</option><option value="ONT">ONT</option><option value="Switch">Switch</option><option value="Lainnya">Lainnya...</option></>)}
+                      {formData["Root_Cause_Cat"] === "Configuration" && (<><option value="Core">Core</option><option value="ONT">ONT</option><option value="Switch">Switch</option><option value="Access Point">Access Point</option><option value="Lainnya">Lainnya...</option></>)}
                       {formData["Root_Cause_Cat"] === "FO" && (<><option value="Access">Access</option><option value="Backbone">Backbone</option><option value="OLT-FDT">OLT-FDT</option><option value="Lainnya">Lainnya...</option></>)}
-                      {formData["Root_Cause_Cat"] === "Equipment" && (<><option value="ONT">ONT</option><option value="Switch">Switch</option><option value="Router">Router</option><option value="Lainnya">Lainnya...</option></>)}
+                      {formData["Root_Cause_Cat"] === "Equipment" && (<><option value="ONT">ONT</option><option value="Switch">Switch</option><option value="Router">Router</option><option value="Access Point">Access Point</option><option value="Lainnya">Lainnya...</option></>)}
                     </select>
                   </div>
                 ) : (

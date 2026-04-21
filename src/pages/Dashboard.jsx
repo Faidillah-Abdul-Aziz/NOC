@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { API_URL } from '../config';
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import Select from 'react-select'; 
-import html2canvas from 'html2canvas'; // IMPORT BARU
+import html2canvas from 'html2canvas'; 
 
 const getCurrentWeekStr = () => {
   const today = new Date();
@@ -57,7 +57,6 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
   const [editFormData, setEditFormData] = useState({});
   const [listModalData, setListModalData] = useState(null);
 
-  // REF BARU UNTUK AREA MTTR YANG AKAN DI-SCREENSHOT
   const mttrSectionRef = useRef(null);
 
   const fetchData = async () => {
@@ -140,7 +139,7 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
     const outSLAList = filteredData.filter(i => i["SLA Real"]?.toLowerCase().includes("out"));
     const outSLA = outSLAList.length;
 
-    const retailData = filteredData.filter(i => i["Category"] === "Retail");
+    const retailData = filteredData.filter(i => (i["Category"] || "").startsWith("Retail"));
     const enterpriseData = filteredData.filter(i => i["Category"] === "Enterprise");
     const retailInSLA = retailData.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
     const retailOutSLA = retailData.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
@@ -149,14 +148,25 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
     const retailPerc = retailData.length > 0 ? ((retailInSLA / retailData.length) * 100).toFixed(1) : 0;
     const entPerc = enterpriseData.length > 0 ? ((enterpriseInSLA / enterpriseData.length) * 100).toFixed(1) : 0;
     
+    const vipDataList = filteredData.filter(i => checkIsVIP(i));
+    const nonVipDataList = filteredData.filter(i => !checkIsVIP(i));
+    const vipInSLA = vipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
+    const vipOutSLA = vipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
+    const nonVipInSLA = nonVipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("in")).length;
+    const nonVipOutSLA = nonVipDataList.filter(i => i["SLA Real"]?.toLowerCase().includes("out")).length;
+    const vipPerc = vipDataList.length > 0 ? ((vipInSLA / vipDataList.length) * 100).toFixed(1) : 0;
+    const nonVipPerc = nonVipDataList.length > 0 ? ((nonVipInSLA / nonVipDataList.length) * 100).toFixed(1) : 0;
+
     const pieData = totalTT > 0 ? [{ name: 'Closed TT', value: completedTT }, { name: 'Open TT', value: activeTT }] : [{ name: 'No Data', value: 1 }];
 
     return { 
       totalTT, activeTT, activeTTList, completedTT, completedTTList, overdueMTTR, overdueMTTRList, 
       inSLA, inSLAList, outSLA, outSLAList, 
       retailData, enterpriseData, retailInSLA, retailOutSLA, enterpriseInSLA, enterpriseOutSLA, 
-      retailPerc, entPerc, pieData 
+      retailPerc, entPerc, pieData,
+      vipDataList, nonVipDataList, vipInSLA, vipOutSLA, nonVipInSLA, nonVipOutSLA, vipPerc, nonVipPerc 
     };
+    
   }, [filteredData]);
 
   const siteOptions = useMemo(() => [...new Set(filteredData.map(i => i["Site"]).filter(Boolean))].map(s => ({ value: s, label: s })), [filteredData]);
@@ -177,7 +187,15 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
       if (tableSla === 'In SLA' && !i["SLA Real"]?.toLowerCase().includes("in")) return false;
       if (tableSla === 'Out SLA' && !i["SLA Real"]?.toLowerCase().includes("out")) return false;
       if (tableCluster !== 'All' && i["Cluster"] !== tableCluster) return false;
-      if (tableCategory !== 'All' && i["Category"] !== tableCategory) return false;
+      
+      if (tableCategory !== 'All') {
+        const cat = i["Category"] || "";
+        if (tableCategory === 'Retail') {
+          if (!cat.startsWith('Retail')) return false;
+        } else {
+          if (cat !== tableCategory) return false;
+        }
+      }
       
       if (tableVipFilter === 'VIP' && !checkIsVIP(i)) return false;
       if (tableVipFilter === 'Non VIP' && checkIsVIP(i)) return false;
@@ -293,60 +311,42 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  // --- FUNGSI DOWNLOAD GAMBAR AREA MTTR ---
- // --- FUNGSI DOWNLOAD GAMBAR AREA MTTR ---
   const handleDownloadMttrImage = async () => {
     const element = mttrSectionRef.current;
     if (!element) return;
 
     try {
       const tableScrollArea = element.querySelector('.mttr-table-scroll');
-      const chartBox = element.querySelector('.mttr-chart-box'); // Ambil elemen chart
+      const chartBox = element.querySelector('.mttr-chart-box'); 
       
-      // 1. Simpan gaya asli
       const originalContainerWidth = element.style.width;
       const originalPadding = element.style.padding;
       const originalTableOverflow = tableScrollArea ? tableScrollArea.style.overflow : '';
       const originalChartWidth = chartBox ? chartBox.style.width : '';
 
-      // 2. Hitung lebar asli konten tabel yang tersembunyi
       const fullWidth = tableScrollArea ? tableScrollArea.scrollWidth : element.offsetWidth;
 
-      // 3. Paksa kontainer utama dan chart memanjang ke kanan sesuai ukuran asli tabel
-      element.style.width = `${fullWidth + 40}px`; // +40px untuk margin/padding
+      element.style.width = `${fullWidth + 40}px`; 
       element.style.padding = '20px';
       
-      if (tableScrollArea) {
-        tableScrollArea.style.overflow = 'visible';
-      }
-      if (chartBox) {
-        // Paksa lebar kotak grafik mengikuti lebar tabel agar garisnya ikut memanjang
-        chartBox.style.width = `${fullWidth}px`; 
-      }
+      if (tableScrollArea) tableScrollArea.style.overflow = 'visible';
+      if (chartBox) chartBox.style.width = `${fullWidth}px`; 
 
-      // 4. Beri jeda 500ms agar Recharts selesai merender animasi perubahaan ukurannya
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 5. Proses Capture Gambar
       const canvas = await html2canvas(element, {
         scale: 2, 
         backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', 
         useCORS: true,
-        windowWidth: fullWidth + 100 // Trik agar tidak terpotong viewport layar monitor Anda
+        windowWidth: fullWidth + 100 
       });
 
-      // 6. Kembalikan gaya DOM ke kondisi semula agar tampilan dashboard normal kembali
       element.style.width = originalContainerWidth;
       element.style.padding = originalPadding; 
       
-      if (tableScrollArea) {
-        tableScrollArea.style.overflow = originalTableOverflow;
-      }
-      if (chartBox) {
-        chartBox.style.width = originalChartWidth;
-      }
+      if (tableScrollArea) tableScrollArea.style.overflow = originalTableOverflow;
+      if (chartBox) chartBox.style.width = originalChartWidth;
 
-      // 7. Download hasilnya
       const imageURL = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       link.href = imageURL;
@@ -498,7 +498,6 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         }
       `}</style>
 
-      {/* HEADER & GLOBAL FILTER */}
       <div className="dash-header">
         <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: 0, color: 'var(--text-main)' }}>Dashboard NOC</h2>
         
@@ -506,7 +505,7 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
           <div className="dash-header-controls">
             <button className="btn-secondary" onClick={fetchData} disabled={loading}>Refresh</button>
             <button className="btn-secondary" onClick={toggleDarkMode}>
-              {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
+              {isDarkMode ? 'Light Mode' : 'Dark Mode'}
             </button>
             <button className="btn-primary" onClick={toggleKioskMode} style={{ background: '#8b5cf6' }}>
               TV Mode
@@ -530,14 +529,12 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         )}
       </div>
       
-      {/* ROW 1: METRICS */}
       <div className="metrics-grid">
         <div className="metric-card clickable-box" onClick={() => openModalDataList('Total Tickets', filteredData)} style={{ borderLeft: '6px solid #3b82f6' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Total Tickets</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'var(--text-main)'}}>{metrics.totalTT}</h3></div>
         <div className="metric-card clickable-box" onClick={() => openModalDataList('Active Tickets (Open)', metrics.activeTTList)} style={{ borderLeft: '6px solid #f59e0b' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Active Tickets (Open)</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'var(--text-main)'}}>{metrics.activeTT}</h3></div>
         <div className="metric-card clickable-box" onClick={() => openModalDataList('Overdue MTTR Tickets', metrics.overdueMTTRList)} style={{ borderLeft: '6px solid #ef4444' }}><p style={{margin:0, fontSize:'0.85rem', color:'var(--text-muted)', fontWeight:'bold', textTransform:'uppercase'}}>Overdue MTTR</p><h3 style={{margin:'8px 0 0', fontSize:'2.2rem', color:'#ef4444'}}>{metrics.overdueMTTR}</h3></div>
       </div>
 
-      {/* ROW 2: PIE & SLA PERFORMANCE */}
       <div className="middle-grid">
         <div className="middle-card" style={{ marginBottom: 0 }}>
           <h4 style={{ margin: '0 0 16px', color: 'var(--text-main)' }}>TT by Status</h4>
@@ -592,7 +589,6 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         </div>
       </div>
 
-      {/* ROW 3: RCA CHART */}
       <div className="middle-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
           <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem' }}>Root Cause Analysis</h3>
@@ -619,7 +615,6 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         </div>
       </div>
 
-      {/* ROW 4: DATA TABLE TICKET DETAILS */}
       <div className="middle-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -652,7 +647,13 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
             </select>
             
             <select value={tableSla} onChange={e=>setTableSla(e.target.value)} className="filter-input"><option value="All">All SLA</option><option value="In SLA">In SLA</option><option value="Out SLA">Out SLA</option></select>
-            <select value={tableCategory} onChange={e=>setTableCategory(e.target.value)} className="filter-input"><option value="All">All Category</option><option value="Retail">Retail</option><option value="Enterprise">Enterprise</option></select>
+            <select value={tableCategory} onChange={e=>setTableCategory(e.target.value)} className="filter-input">
+              <option value="All">All Category</option>
+              <option value="Enterprise">Enterprise</option>
+              <option value="Retail">Retail</option>
+              <option value="Retail GR">Retail GR</option>
+              <option value="Retail EA">Retail EA</option>
+            </select>
             <div className="filter-select-container">
               <Select 
                 isMulti options={siteOptions} value={tableSite} onChange={setTableSite} placeholder="Sites..." 
@@ -693,7 +694,11 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
                     <td style={{ fontWeight: '600', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>{r["NOC"] || "-"}</td>
                     
                     {!isKioskMode && (
-                      <td><button onClick={() => openTicketDetail(r)} style={{ padding: '6px 14px', backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', color: 'var(--text-main)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}>Lihat / Edit</button></td>
+                      <td>
+                        <button onClick={() => openTicketDetail(r)} style={{ padding: '6px 14px', backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', color: 'var(--text-main)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}>
+                          Lihat / Edit
+                        </button>
+                      </td>
                     )}
                     
                     <td style={{ whiteSpace: 'nowrap' }}><span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isOutSla ? '#ef4444' : '#10b981', marginRight: '6px' }}></span><span style={{ color: isOutSla ? '#ef4444' : '#10b981', fontWeight: '700' }}>{r["SLA Real"] || '-'}</span></td>
@@ -707,24 +712,18 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         </div>
       </div>
 
-      {/* ROW 5: MTTR YTD TRACKING (DENGAN TOMBOL DOWNLOAD SCREENSHOT) */}
       <div className="middle-card" style={{ marginBottom: 0 }}>
-        
-        {/* Header MTTR dengan tombol download */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
           <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem' }}>MTTR & SLA Weekly Analysis YTD</h3>
           {!isKioskMode && (
             <button onClick={handleDownloadMttrImage} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', borderColor: '#3b82f6', color: '#3b82f6' }}>
-              📸 Download Gambar
+              Download Gambar
             </button>
           )}
         </div>
         
-        {/* AREA INI YANG AKAN DI SCREENSHOT */}
         <div className="mttr-container" ref={mttrSectionRef} style={{ backgroundColor: 'var(--bg-card)', padding: '10px' }}>
-          
-          
-            <div className="mttr-chart-box">
+          <div className="mttr-chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={mttrDataAnalysis} margin={{ top: 35, right: 20, bottom: 5, left: -10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e2e8f0'} />
@@ -733,12 +732,10 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
                 <RechartsTooltip contentStyle={{backgroundColor: isDarkMode ? '#1e293b' : '#fff', borderColor: isDarkMode ? '#475569' : '#e2e8f0', color: isDarkMode ? '#f8fafc' : '#0f172a', borderRadius: '8px'}} />
                 <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '0.85rem' }} />
                 
-                {/* PENAMBAHAN: isAnimationActive={false} untuk mematikan animasi */}
                 <Line type="monotone" dataKey="MTTR YTD" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 5, strokeWidth: 2, fill: isDarkMode ? '#1e293b' : '#fff' }} activeDot={{ r: 8 }} isAnimationActive={false}>
                   <LabelList dataKey="MTTR YTD" position="top" offset={12} formatter={(val) => `${val.toFixed(1)}%`} fill={isDarkMode ? '#f8fafc' : '#334155'} fontSize={11} fontWeight="bold" />
                 </Line>
                 
-                {/* PENAMBAHAN: isAnimationActive={false} untuk garis target */}
                 <Line type="monotone" dataKey="Target" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={false} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -776,11 +773,9 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
               </tbody>
             </table>
           </div>
-
         </div>
       </div>
 
-      {/* ----------------- MODAL POPUP UNIVERSAL (LIST DATA) ----------------- */}
       {listModalData && !isKioskMode && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.85)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px', boxSizing: 'border-box', backdropFilter: 'blur(4px)' }}>
           <div style={{ backgroundColor: 'var(--bg-card)', width: '100%', maxWidth: '1400px', height: '85vh', maxHeight: '90vh', borderRadius: '16px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
@@ -811,7 +806,11 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
                           <td style={{ minWidth: '150px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{r["Progress Update"] || "-"}</td>
                           <td style={{ fontWeight: '600', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>{r["NOC"] || "-"}</td>
                           
-                          <td><button onClick={() => openTicketDetail(r)} style={{ padding: '6px 14px', backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', color: 'var(--text-main)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}>Lihat / Edit</button></td>
+                          <td>
+                            <button onClick={() => openTicketDetail(r)} style={{ padding: '6px 14px', backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', color: 'var(--text-main)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}>
+                              Lihat / Edit
+                            </button>
+                          </td>
                           
                           <td style={{ whiteSpace: 'nowrap' }}><span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isOutSla ? '#ef4444' : '#10b981', marginRight: '6px' }}></span><span style={{ color: isOutSla ? '#ef4444' : '#10b981', fontWeight: '700' }}>{r["SLA Real"] || '-'}</span></td>
                           <td><span style={{ padding: '4px 10px', borderRadius: '20px', fontWeight: '700', fontSize: '0.7rem', textTransform: 'uppercase', whiteSpace: 'nowrap', backgroundColor: isOp ? 'rgba(217, 119, 6, 0.15)' : 'rgba(16, 185, 129, 0.15)', color: isOp ? '#d97706' : '#10b981' }}>{r["Status TT"]}</span></td>
@@ -827,7 +826,6 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
         </div>
       )}
 
-      {/* ----------------- MODAL POP-UP DETAIL SPESIFIK & EDIT TIKET ----------------- */}
       {viewTicket && !isKioskMode && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.85)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px', boxSizing: 'border-box', backdropFilter: 'blur(4px)' }}>
           <div style={{ backgroundColor: 'var(--bg-card)', width: '100%', maxWidth: '1200px', height: '85vh', maxHeight: '90vh', borderRadius: '16px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
@@ -842,11 +840,11 @@ const Dashboard = ({ isDarkMode, toggleDarkMode }) => {
               
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {!isEditing ? (
-                  <button onClick={() => setIsEditing(true)} className="btn-secondary" style={{ borderColor: '#3b82f6', color: '#3b82f6' }}>✏️ Edit Data</button>
+                  <button onClick={() => setIsEditing(true)} className="btn-secondary" style={{ borderColor: '#3b82f6', color: '#3b82f6' }}>Edit Data</button>
                 ) : (
                   <>
                     <button onClick={() => setIsEditing(false)} className="btn-secondary" style={{ color: '#ef4444' }}>Batal</button>
-                    <button onClick={handleSaveTicket} className="btn-primary" style={{ backgroundColor: '#3b82f6' }}>💾 Simpan Perubahan</button>
+                    <button onClick={handleSaveTicket} className="btn-primary" style={{ backgroundColor: '#3b82f6' }}>Simpan Perubahan</button>
                   </>
                 )}
                 

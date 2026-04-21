@@ -252,7 +252,7 @@ const UpdateTicket = ({ isDarkMode, toggleDarkMode }) => {
         <div className="dash-header-controls">
           <button className="btn-secondary" onClick={fetchTickets} disabled={loading}>🔄 Refresh</button>
           <button className="btn-secondary" onClick={toggleDarkMode}>
-            {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
+            {isDarkMode ? 'Light Mode' : 'Dark Mode'}
           </button>
         </div>
       </div>
