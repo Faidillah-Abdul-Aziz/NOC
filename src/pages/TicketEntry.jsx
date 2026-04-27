@@ -257,7 +257,7 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
                 <div className="input-group">
                   <label className="noc-label required">Category</label>
                   <select className="noc-input" name="Category" value={formData["Category"]} onChange={handleChange} required>
-                    <option value="">-- Kategori --</option><option value="Retail EA">Retail EA</option><option value="Retail GR">Retail GR</option><option value="Enterprise">Enterprise</option>
+                    <option value="">-- Kategori --</option><option value="Retail EA">Retail EA</option><option value="Retail GR">Retail GR</option><option value="Retail TBG">Retail TBG</option><option value="Enterprise">Enterprise</option>
                   </select>
                 </div>
                 <div className="input-group">
