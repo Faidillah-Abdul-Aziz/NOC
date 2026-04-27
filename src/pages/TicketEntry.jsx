@@ -212,7 +212,7 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
           <p style={{ margin: '4px 0 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Input operasional NOC harian.</p>
         </div>
         <button className="btn-secondary" onClick={toggleDarkMode}>
-          {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
+          {isDarkMode ? 'Light Mode' : 'Dark Mode'}
         </button>
       </div>
 
@@ -383,7 +383,7 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
                 <div className="input-group">
                   <label className="noc-label required">NOC In Charge</label>
                   <select className="noc-input" name="NOC" value={formData["NOC"]} onChange={handleChange} required>
-                    <option value="">-- Pilih NOC --</option><option value="Faidillah">Faidillah</option><option value="Yudi">Yudi</option><option value="Adit">Adit</option><option value="Miko">Miko</option>
+                    <option value="">-- Pilih NOC --</option><option value="Faidillah">Faidillah</option><option value="Wahyudi">Wahyudi</option><option value="Aditya">Aditya</option><option value="Jatmiko">Jatmiko</option>
                   </select>
                 </div>
                 <div className="input-group">
