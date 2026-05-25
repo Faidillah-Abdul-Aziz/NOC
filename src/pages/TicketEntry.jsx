@@ -7,16 +7,16 @@ import 'react-datepicker/dist/react-datepicker.css';
 const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
   const [loading, setLoading] = useState(false);
   
-  const [deskripsiOptions, setDeskripsiOptions] = useState([]);
-  const [progressOptions, setProgressOptions] = useState([]);
-  const [restorationOptions, setRestorationOptions] = useState([]);
   const [siteOptions, setSiteOptions] = useState([]); 
   
   const [formData, setFormData] = useState({
-    "Impact service": "", "Media Info": "Messenger", "Deskripsi": "", "ID dan Nama Customer": "",
-    "ISP_Select": "IdeaNet", "ISP_Lainnya": "", "Cluster": "", "Type Cluster": "Non VIP", "Progress Update": "",
+    "Impact service": "", "Media Info": "Messenger", "ID dan Nama Customer": "",
+    "Deskripsi_Select": "", "Deskripsi_Manual": "", // Diubah
+    "ISP_Select": "IdeaNet", "ISP_Lainnya": "", "Cluster": "", "Type Cluster": "Non VIP", 
+    "Progress_Select": "", "Progress_Manual": "", 
     "Start Time": "", "Response Time": "", "Resolved Time": "", "Start Stop Clock": "", "Finish Stop Clock": "",
-    "Restoration Action": "", "Root_Cause_Cat": "", "Root_Cause_Sub": "", "Root_Cause_Manual": "", 
+    "Restoration_Select": "", "Restoration_Manual": "", 
+    "Root_Cause_Cat": "", "Root_Cause_Sub": "", "Root_Cause_Manual": "", 
     "Visit or No Visit": "", "Product": "Internet", "PIC_Select": "Ideanet", "PIC_Lainnya": "", 
     "Source": "Manual", "Status TT": "Open", "Network IDI": "Yes", "NOC": "", "Site": "", 
     "Category": "Retail", // Default
@@ -41,9 +41,6 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
         const result = await response.json();
         if (result.status === "success" && result.data) {
           const data = result.data;
-          setDeskripsiOptions(getSortedByFrequency(data, "Deskripsi", "Deskripsi Awal"));
-          setProgressOptions(getSortedByFrequency(data, "Progress Update"));
-          setRestorationOptions(getSortedByFrequency(data, "Restoration Action"));
           setSiteOptions(getSortedByFrequency(data, "Site")); 
         }
       } catch (error) { console.error("Gagal menarik data:", error); }
@@ -90,9 +87,29 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
     const payload = { ...formData };
     payload["ISP"] = payload["ISP_Select"] === "Lainnya" ? payload["ISP_Lainnya"] : payload["ISP_Select"];
     delete payload["ISP_Select"]; delete payload["ISP_Lainnya"];
+    
     payload["PIC"] = payload["PIC_Select"] === "Lainnya" ? payload["PIC_Lainnya"] : payload["PIC_Select"];
     delete payload["PIC_Select"]; delete payload["PIC_Lainnya"];
 
+    // Mapping Deskripsi
+    payload["Deskripsi"] = payload["Deskripsi_Select"] === "Tulis sendiri" 
+      ? payload["Deskripsi_Manual"] 
+      : payload["Deskripsi_Select"];
+    delete payload["Deskripsi_Select"]; delete payload["Deskripsi_Manual"];
+
+    // Mapping Progress Update
+    payload["Progress Update"] = payload["Progress_Select"] === "Tulis Manual" 
+      ? payload["Progress_Manual"] 
+      : payload["Progress_Select"];
+    delete payload["Progress_Select"]; delete payload["Progress_Manual"];
+
+    // Mapping Restoration Action
+    payload["Restoration Action"] = payload["Restoration_Select"] === "Tulis Manual" 
+      ? payload["Restoration_Manual"] 
+      : payload["Restoration_Select"];
+    delete payload["Restoration_Select"]; delete payload["Restoration_Manual"];
+
+    // Mapping Root Cause
     let finalRootCause = "";
     if (payload["Root_Cause_Cat"] === "Lainnya") finalRootCause = payload["Root_Cause_Manual"];
     else if (payload["Root_Cause_Sub"] === "Lainnya") finalRootCause = payload["Root_Cause_Cat"] + " " + payload["Root_Cause_Manual"];
@@ -106,15 +123,26 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
       await fetch(API_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(payload) });
       alert("Tiket berhasil disimpan ke Database NOC!");
       setFormData({
-        "Impact service": "", "Media Info": "Messenger", "Deskripsi": "", "ID dan Nama Customer": "", "ISP_Select": "IdeaNet", "ISP_Lainnya": "", "Cluster": "", "Type Cluster": "Non VIP", "Progress Update": "", "Start Time": "", "Response Time": "", "Resolved Time": "", "Start Stop Clock": "", "Finish Stop Clock": "", "Restoration Action": "", "Root_Cause_Cat": "", "Root_Cause_Sub": "", "Root_Cause_Manual": "", "Visit or No Visit": "", "Product": "Internet", "PIC_Select": "Ideanet", "PIC_Lainnya": "", "Source": "Manual", "Status TT": "Open", "Network IDI": "Yes", "NOC": "", "Site": "", 
+        "Impact service": "", "Media Info": "Messenger", "ID dan Nama Customer": "", 
+        "Deskripsi_Select": "", "Deskripsi_Manual": "",
+        "ISP_Select": "IdeaNet", "ISP_Lainnya": "", "Cluster": "", "Type Cluster": "Non VIP", 
+        "Progress_Select": "", "Progress_Manual": "", 
+        "Start Time": "", "Response Time": "", "Resolved Time": "", "Start Stop Clock": "", "Finish Stop Clock": "", 
+        "Restoration_Select": "", "Restoration_Manual": "", 
+        "Root_Cause_Cat": "", "Root_Cause_Sub": "", "Root_Cause_Manual": "", "Visit or No Visit": "", "Product": "Internet", "PIC_Select": "Ideanet", "PIC_Lainnya": "", "Source": "Manual", "Status TT": "Open", "Network IDI": "Yes", "NOC": "", "Site": "", 
         "Category": "Retail" 
       });
     } catch (error) { alert("Gagal koneksi."); } finally { setLoading(false); }
   };
 
   const mandatoryFields = ["ID dan Nama Customer", "Site", "Cluster", "Type Cluster", "Category", "Product", "NOC"];
-  const filledFields = mandatoryFields.filter(f => formData[f].trim() !== "").length;
+  const filledFields = mandatoryFields.filter(f => formData[f] && formData[f].trim() !== "").length;
   const progressPercent = Math.round((filledFields / mandatoryFields.length) * 100);
+
+  // Helper untuk Preview
+  const previewDeskripsi = formData["Deskripsi_Select"] === "Tulis sendiri" ? formData["Deskripsi_Manual"] : formData["Deskripsi_Select"];
+  const previewProgress = formData["Progress_Select"] === "Tulis Manual" ? formData["Progress_Manual"] : formData["Progress_Select"];
+  const previewRestoration = formData["Restoration_Select"] === "Tulis Manual" ? formData["Restoration_Manual"] : formData["Restoration_Select"];
 
   return (
     <div className={`entry-wrapper ${isDarkMode ? 'dark' : ''}`}>
@@ -245,7 +273,7 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
                 <div className="input-group">
                   <label className="noc-label required">Cluster</label>
                   <select className="noc-input" name="Cluster" value={formData["Cluster"]} onChange={handleChange} required>
-                    <option value="">-- Wilayah --</option><option value="Jawa Tengah">Jawa Tengah</option><option value="Jawa Barat">Jawa Barat</option><option value="Jawa Timur">Jawa Timur</option><option value="Jabodetabek">Jabodetabek</option><option value="Bali">Bali</option>
+                    <option value="">-- Wilayah --</option><option value="Jawa Barat">Jawa Barat</option><option value="Jawa Tengah">Jawa Tengah</option><option value="Jawa Timur">Jawa Timur</option><option value="Jabodetabek">Jabodetabek</option><option value="Bali">Bali</option>
                   </select>
                 </div>
                 <div className="input-group">
@@ -257,7 +285,7 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
                 <div className="input-group">
                   <label className="noc-label required">Category</label>
                   <select className="noc-input" name="Category" value={formData["Category"]} onChange={handleChange} required>
-                    <option value="">-- Kategori --</option><option value="Retail EA">Retail EA</option><option value="Retail GR">Retail GR</option><option value="Retail TBG">Retail TBG</option><option value="Enterprise">Enterprise</option>
+                    <option value="">-- Kategori --</option><option value="Retail GR">Retail GR</option><option value="Retail EA">Retail EA</option><option value="Retail TBG">Retail TBG</option><option value="Enterprise">Enterprise</option>
                   </select>
                 </div>
                 <div className="input-group">
@@ -310,11 +338,27 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
                   </select>
                 </div>
                 
+                {/* Deskripsi Berubah Disini */}
                 <div className="input-group noc-full">
                   <label className="noc-label required">Deskripsi / Kronologi Awal</label>
-                  <input type="text" className="noc-input" name="Deskripsi" list="deskripsi-list" value={formData["Deskripsi"]} onChange={handleChange} placeholder="Ketik / pilih dari database..." autoComplete="off" required />
-                  <datalist id="deskripsi-list">{deskripsiOptions.map((s, i) => <option key={i} value={s} />)}</datalist>
+                  <select className="noc-input" name="Deskripsi_Select" value={formData["Deskripsi_Select"]} onChange={handleChange} required>
+                    <option value="">-- Pilih Kronologi --</option>
+                    <option value="No Internet Connection">No Internet Connection</option>
+                    <option value="Internet Lambat">Internet Lambat</option>
+                    <option value="Request setting SSID">Request setting SSID</option>
+                    <option value="Link backbone down">Link backbone down</option>
+                    <option value="Link intermitten">Link intermitten</option>
+                    <option value="Issue TV Blank - Frezee">Issue TV Blank - Frezee</option>
+                    <option value="Tulis sendiri">Tulis sendiri...</option>
+                  </select>
                 </div>
+                {formData["Deskripsi_Select"] === "Tulis sendiri" && (
+                  <div className="input-group noc-full">
+                    <label className="noc-label required">Ketik Deskripsi Manual</label>
+                    <input type="text" className="noc-input" name="Deskripsi_Manual" value={formData["Deskripsi_Manual"]} onChange={handleChange} placeholder="Ketik kronologi secara manual..." required={formData["Deskripsi_Select"] === "Tulis sendiri"} />
+                  </div>
+                )}
+                
               </div>
             </div>
 
@@ -403,7 +447,7 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
                 <div className="input-group">
                   <label className="noc-label">Kategori Root Cause</label>
                   <select className="noc-input" name="Root_Cause_Cat" value={formData["Root_Cause_Cat"]} onChange={handleChange}>
-                    <option value="">-- Kategori --</option><option value="Configuration">Configuration</option><option value="Power">Power</option><option value="FO">FO</option><option value="Equipment">Equipment</option><option value="Lainnya">Manual...</option>
+                    <option value="">-- Kategori --</option><option value="Configuration">Configuration</option><option value="Full Traffic">Full Traffic</option><option value="Power">Power</option><option value="FO">FO</option><option value="Equipment">Equipment</option><option value="User Equipment">User Equipment</option><option value="Lainnya">Manual...</option>
                   </select>
                 </div>
                 
@@ -414,7 +458,7 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
                       <option value="">-- Detail --</option>
                       {formData["Root_Cause_Cat"] === "Configuration" && (<><option value="Core">Core</option><option value="ONT">ONT</option><option value="Switch">Switch</option><option value="Access Point">Access Point</option><option value="Lainnya">Lainnya...</option></>)}
                       {formData["Root_Cause_Cat"] === "FO" && (<><option value="Access">Access</option><option value="Backbone">Backbone</option><option value="OLT-FDT">OLT-FDT</option><option value="Lainnya">Lainnya...</option></>)}
-                      {formData["Root_Cause_Cat"] === "Equipment" && (<><option value="ONT">ONT</option><option value="Switch">Switch</option><option value="Router">Router</option><option value="Access Point">Access Point</option><option value="Lainnya">Lainnya...</option></>)}
+                      {formData["Root_Cause_Cat"] === "Equipment" && (<><option value="ONT">ONT</option><option value="Switch">Switch</option><option value="Router">Router</option><option value="Access Point">Access Point</option><option value="Adaptor">Adaptor</option><option value="Lainnya">Lainnya...</option></>)}
                     </select>
                   </div>
                 ) : (
@@ -433,15 +477,73 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
 
                 <div className="input-group noc-full">
                   <label className="noc-label">Progress Update Saat Ini</label>
-                  <input type="text" className="noc-input" name="Progress Update" list="progress-list" value={formData["Progress Update"]} onChange={handleChange} placeholder="Status progres..." autoComplete="off" />
-                  <datalist id="progress-list">{progressOptions.map((s, i) => <option key={i} value={s} />)}</datalist>
+                  <select className="noc-input" name="Progress_Select" value={formData["Progress_Select"]} onChange={handleChange}>
+                    <option value="">-- Pilih Progress --</option>
+                    <option value="Adaptor tercabut">Adaptor tercabut</option>
+                    <option value="Adaptor Rusak">Adaptor Rusak</option>
+                    <option value="Aksesoris tiang patah sehingga kabel menjulur">Aksesoris tiang patah sehingga kabel menjulur</option>
+                    <option value="Channel 2.4 GHz crowded">Channel 2.4 GHz crowded</option>
+                    <option value="Congest pada salah satu NAP">Congest pada salah satu NAP</option>
+                    <option value="Flapping Link (logical issue)">Flapping Link (logical issue)</option>
+                    <option value="FO Cut">FO Cut</option>
+                    <option value="FO Cut di jalur distribusi / FDT / FAT / Closure">FO Cut di jalur distribusi / FDT / FAT / Closure</option>
+                    <option value="Full Traffic">Full Traffic</option>
+                    <option value="Isu Channel IPTV">Isu Channel IPTV</option>
+                    <option value="Mati listrik di sisi user">Mati listrik di sisi user</option>
+                    <option value="Normal (sudah dilakukan pengecekan dari beberapa sisi)">Normal (sudah dilakukan pengecekan dari beberapa sisi)</option>
+                    <option value="ONT Hang">ONT Rusak akibat bencana alam</option>
+                    <option value="ONT Hang — sudah direboot, sudah direconfig, namun belum normal">ONT Hang — sudah direboot, sudah direconfig, namun belum normal</option>
+                    <option value="ONT Hang akibat redaman FO tidak bagus">ONT Hang akibat redaman FO tidak bagus</option>
+                    <option value="Patchcore rusak — perlu penggantian patchcore baru">Patchcore rusak — perlu penggantian patchcore baru</option>
+                    <option value="Perangkat mitra rusak">Perangkat mitra rusak</option>
+                    <option value="Perlu cabut–pasang patchcore/dropwire">Perlu cabut–pasang patchcore/dropwire</option>
+                    <option value="Precon rusak">Precon rusak</option>
+                    <option value="Request Change SSID & Password">Request Change SSID & Password</option>
+                    <option value="Request Relokasi ONT">Request Relokasi ONT</option>
+                    <option value="Reroute traffic via BGP">Reroute traffic via BGP</option>
+                    <option value="RTO ke network Telkom">RTO ke network Telkom</option>
+                    <option value="Salah pemasangan kabel">Salah pemasangan kabel</option>
+                    <option value="SSID kembali ke default setelah mati listrik">SSID kembali ke default setelah mati listrik</option>
+                    <option value="Tulis Manual">Tulis Manual...</option>
+                  </select>
                 </div>
+                {formData["Progress_Select"] === "Tulis Manual" && (
+                  <div className="input-group noc-full">
+                    <label className="noc-label">Ketik Progress Manual</label>
+                    <input type="text" className="noc-input" name="Progress_Manual" value={formData["Progress_Manual"]} onChange={handleChange} placeholder="Ketik status progress secara manual..." />
+                  </div>
+                )}
                 
                 <div className="input-group noc-full">
                   <label className="noc-label">Restoration Action</label>
-                  <input type="text" className="noc-input" name="Restoration Action" list="restoration-list" value={formData["Restoration Action"]} onChange={handleChange} placeholder="Tindakan pemulihan..." autoComplete="off" />
-                  <datalist id="restoration-list">{restorationOptions.map((s, i) => <option key={i} value={s} />)}</datalist>
+                  <select className="noc-input" name="Restoration_Select" value={formData["Restoration_Select"]} onChange={handleChange}>
+                    <option value="">-- Pilih Restoration Action --</option>
+                    <option value="Edukasi Customer">Edukasi Customer</option>
+                    <option value="Install Accessories Infrastructure">Install Accessories Infrastructure</option>
+                    <option value="Network Configuration">Network Configuration</option>
+                    <option value="Reboot ONT">Reboot ONT</option>
+                    <option value="Reconfig SSID & Password">Reconfig SSID & Password</option>
+                    <option value="Relocate ONT">Relocate ONT</option>
+                    <option value="Replace Barrel">Replace Barrel</option>
+                    <option value="Replace Channel">Replace Channel</option>
+                    <option value="Replace Equipment">Replace Equipment</option>
+                    <option value="Replace Fast Connector">Replace Fast Connector</option>
+                    <option value="Replace ONT">Replace ONT</option>
+                    <option value="Replace Patchcore">Replace Patchcore</option>
+                    <option value="Replace Precon">Replace Precon</option>
+                    <option value="Replug Connector">Replug Connector</option>
+                    <option value="Request EOS Visit">Request EOS Visit</option>
+                    <option value="Reroute Traffic">Reroute Traffic</option>
+                    <option value="Splicing FO">Splicing FO</option>
+                    <option value="Tulis Manual">Tulis Manual...</option>
+                  </select>
                 </div>
+                {formData["Restoration_Select"] === "Tulis Manual" && (
+                  <div className="input-group noc-full">
+                    <label className="noc-label">Ketik Restoration Action Manual</label>
+                    <input type="text" className="noc-input" name="Restoration_Manual" value={formData["Restoration_Manual"]} onChange={handleChange} placeholder="Ketik tindakan pemulihan secara manual..." />
+                  </div>
+                )}
 
                 <div className="input-group noc-full">
                   <label className="noc-label required">Status Ticket</label>
@@ -491,13 +593,13 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
 
           <div className="preview-item">
             <span className="preview-label">Issue Description</span>
-            <span className={`preview-val ${!formData["Deskripsi"] ? 'empty' : ''}`} style={{ fontSize: '0.85rem' }}>{formData["Deskripsi"] || 'Belum ada kronologi...'}</span>
+            <span className={`preview-val ${!previewDeskripsi ? 'empty' : ''}`} style={{ fontSize: '0.85rem' }}>{previewDeskripsi || 'Belum ada kronologi...'}</span>
           </div>
 
           <div style={{ borderTop: '1px dashed var(--border)', margin: '15px 0', paddingTop: '15px' }}>
             <div className="preview-item">
               <span className="preview-label">Progress Update</span>
-              <span className={`preview-val ${!formData["Progress Update"] ? 'empty' : ''}`}>{formData["Progress Update"] || 'Standby'}</span>
+              <span className={`preview-val ${!previewProgress ? 'empty' : ''}`}>{previewProgress || 'Standby'}</span>
             </div>
             <div className="preview-item">
               <span className="preview-label">Root Cause (RCA)</span>
@@ -509,7 +611,7 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
             </div>
             <div className="preview-item">
               <span className="preview-label">Restoration Action</span>
-              <span className={`preview-val ${!formData["Restoration Action"] ? 'empty' : ''}`}>{formData["Restoration Action"] || '-'}</span>
+              <span className={`preview-val ${!previewRestoration ? 'empty' : ''}`}>{previewRestoration || '-'}</span>
             </div>
           </div>
 
@@ -524,5 +626,4 @@ const TicketEntry = ({ isDarkMode, toggleDarkMode }) => {
     </div>
   );
 };
-
 export default TicketEntry;
