@@ -4,18 +4,20 @@ import TicketEntry from './pages/TicketEntry';
 import Dashboard from './pages/Dashboard'; 
 import UpdateTicket from './pages/UpdateTicket'; 
 import ActivationEntry from './pages/ActivationEntry';
+// 1. IMPORT KOMPONEN BARU
+import CustomerDataEntry from './pages/CustomerDataEntry'; 
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
-  // 1. STATE DARK MODE (Membaca dari memori browser agar tidak hilang saat di-refresh)
+  // STATE DARK MODE
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('theme') === 'dark';
   });
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
   
-  // 2. FUNGSI TOGGLE TEMA (Menyimpan pilihan ke memori browser)
+  // FUNGSI TOGGLE TEMA
   const toggleDarkMode = () => {
     setIsDarkMode(prevMode => {
       const newMode = !prevMode;
@@ -24,7 +26,7 @@ function App() {
     });
   };
 
-  // 3. MENGATUR BACKGROUND UTAMA DARI SINI
+  // MENGATUR BACKGROUND UTAMA
   useEffect(() => {
     const mainContent = document.querySelector('.main-content');
     if (mainContent) {
@@ -114,6 +116,8 @@ function App() {
               <Link to="/analytics" className="nav-item">Dashboard</Link>
               <Link to="/update" className="nav-item">Update Ticket</Link>
               <Link to="/activation" className="nav-item">Input Activation</Link>
+              {/* 2. MENU TAMBAHAN UNTUK DATA CUSTOMER */}
+              <Link to="/customer-data" className="nav-item">Data Customer</Link>
             </div>
           </div>
         </div>
@@ -125,11 +129,12 @@ function App() {
           </button>
 
           <Routes>
-            {/* 4. MENGIRIMKAN STATE & FUNGSI TEMA KE SEMUA HALAMAN */}
             <Route path="/" element={<TicketEntry isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
             <Route path="/analytics" element={<Dashboard isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} /> 
             <Route path="/update" element={<UpdateTicket isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
             <Route path="/activation" element={<ActivationEntry isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
+            {/* 3. ROUTE TAMBAHAN UNTUK DATA CUSTOMER */}
+            <Route path="/customer-data" element={<CustomerDataEntry isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
           </Routes>
         </div>
 
@@ -138,4 +143,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;
